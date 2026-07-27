@@ -1,0 +1,45 @@
+<scrollable-settings-container xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                               xsi:noNamespaceSchemaLocation="https://monkeymanboy.github.io/BSML-Docs/BSMLSchema.xsd">
+    <settings-submenu text="Recommendations" hover-hint="Map recommendation settings">
+        <settings-container>
+            <vertical spacing="4" vertical-fit="PreferredSize">
+                <text text="Settings for the recommendation algorithm"
+                      font-size="5"
+                      align="Center"/>
+                <toggle-setting text="Favor songs by duration"
+                                value="recommendations-duration-enabled"
+                                hover-hint="If turned on the algorithm will favor the songs with duration within the specified boundaries"/>
+                <dropdown-list-setting text="Min favoured song duration"
+                                value="minimum-song-duration-choice"
+                                choices="minimum-song-duration-options"
+                                apply-on-change="true"
+                                on-change="minimum-song-duration-changed"
+                                hover-hint="Minimum duration for a song to be favoured by the algorithm. Does nothing if Favor songs by duration is off"/>
+                <dropdown-list-setting id="maximum-song-duration-dropdown"
+                                text="Max favoured song duration"
+                                value="maximum-song-duration-choice"
+                                choices="maximum-song-duration-options"
+                                apply-on-change="true"
+                                on-change="maximum-song-duration-changed"
+                                hover-hint="Maximum duration for a song to be favoured by the algorithm. Does nothing if Favor songs by duration is off"/>
+                <dropdown-list-setting text="END ME preferred setting"
+                                value="end-me-choice" 
+                                choices="end-me-options"
+                                hover-hint="Changes the way algorithm works on the END ME difficulty"/>
+                <button text="Back" click-event="back"/>
+            </vertical>
+        </settings-container>
+    </settings-submenu>
+    
+    <settings-submenu text="Animation" hover-hint="Roulette animation settings">
+        <settings-container>
+            <vertical spacing="4" vertical-fit="PreferredSize">
+                <text text="Settings for the roulette animation"
+                       font-size="5"
+                       align="Center"/>
+                <slider-setting text="Animation speed" min="0.5" max="2" increment="0.25" value="speed-animation-value" />
+                <button text="Back" click-event="back"/>
+            </vertical>
+        </settings-container>
+    </settings-submenu>
+</scrollable-settings-container>

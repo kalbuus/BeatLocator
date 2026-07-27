@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <BeatSaberDir>C:\Path\To\Beat Saber</BeatSaberDir>
+  </PropertyGroup>
+</Project>

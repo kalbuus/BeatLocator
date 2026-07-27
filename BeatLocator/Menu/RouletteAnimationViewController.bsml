@@ -1,0 +1,41 @@
+<vertical id="roulette-root" child-control-width="true" child-control-height="true" child-expand-width="false" child-expand-height="false" child-align="MiddleCenter" spacing="1">
+    <horizontal id="roulette-viewport"
+                bg="round-rect-panel"
+                preferred-width="96"
+                preferred-height="42"
+                child-control-width="false"
+                child-control-height="false"
+                child-expand-width="false"
+                child-expand-height="false">
+        <vertical id="song-details"
+                  active="false"
+                  ignore-layout="true"
+                  preferred-width="62"
+                  preferred-height="36"
+                  child-control-width="true"
+                  child-control-height="true"
+                  child-expand-width="false"
+                  child-expand-height="false"
+                  child-align="UpperLeft"
+                  spacing="0.5">
+            <horizontal id="song-title-row"
+                        preferred-width="62"
+                        preferred-height="6"
+                        spacing="1"
+                        child-control-width="true"
+                        child-control-height="true"
+                        child-expand-width="false"
+                        child-expand-height="false">
+                <text id="song-title" text="~songTitleText" align="Left" font-size="5.5" preferred-width="39" preferred-height="6" />
+                <text id="song-sub-name" text="~songSubNameText" align="Left" font-size="2.8" color="#888888" preferred-width="22" preferred-height="6" />
+            </horizontal>
+            <text id="song-author" text="~songAuthorText" align="Left" font-size="3.2" preferred-height="4.5" />
+            <text id="song-mapper" text="~songMapperText" align="Left" font-size="3.2" preferred-height="4.5" />
+            <text id="song-difficulty" text="~songDifficultyText" align="Left" font-size="3.2" preferred-height="7" />
+            <horizontal id="song-actions" spacing="2" horizontal-fit="PreferredSize" vertical-fit="PreferredSize">
+                <button id="skip-button" text="SKIP" on-click="skipPressed" preferred-width="28" preferred-height="7" />
+                <action-button id="primary-button" text="~primaryButtonText" on-click="primaryPressed" preferred-width="28" preferred-height="7" />
+            </horizontal>
+        </vertical>
+    </horizontal>
+</vertical>

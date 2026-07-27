@@ -1,0 +1,64 @@
+<vertical child-control-height="false" child-expand-height="false" child-expand-width="false" child-align="UpperCenter" spacing="3">
+    
+    <horizontal bg="panel-top" pad-left="15" pad-right="15" horizontal-fit="PreferredSize" vertical-fit="PreferredSize">
+        <text text="BeatLocator" align="Center" font-size="8"/>
+    </horizontal>
+    
+    <button text="X" 
+            on-click="exitPressed" 
+            ignore-layout="true" 
+            anchor-pos-x="91" 
+            anchor-pos-y="-6" 
+            pref-width="10" 
+            pref-height="10" 
+            font-size="5" />
+
+    <horizontal child-control-height="false" child-expand-height="false" child-expand-width="false" child-align="LowerCenter" spacing="4">
+        <button on-click="bsPressed" interactable="false" 
+                       stroke-visible="false"
+                       text=""
+                       hover-hint="Coming soon"
+                       preferred-width="25" 
+                       preferred-height="35" 
+                       pad="2">
+            <vertical child-control-width="true" child-control-height="true" child-align="MiddleCenter" spacing="2">
+                <image src="BeatLocator.Assets.bs_logo.png" preserve-aspect="true" pref-width="12" pref-height="12" />
+                <text text="BeatSaver" font-size="4" align="Left" word-wrap="true" />
+            </vertical>
+        </button>
+    
+        <button id="beatleader-button" on-click="blPressed"
+                       stroke-visible="false"
+                       text=""
+                       hover-hint="~beatLeaderButtonHover"
+                       preferred-width="25" 
+                       preferred-height="35" 
+                       pad="2">
+            <vertical child-control-width="true" child-control-height="true" child-align="MiddleCenter" spacing="2">
+                <image src="BeatLocator.Assets.bl_logo.png" preserve-aspect="true" pref-width="12" pref-height="12" />
+                <text text="BeatLeader" font-size="4" align="Left" word-wrap="true" />
+            </vertical>
+        </button>
+    
+        <button on-click="scPressed" interactable="false"
+                       stroke-visible="false"
+                       text=""
+                       hover-hint="Coming soon"
+                       preferred-width="25" 
+                       preferred-height="35" 
+                       pad="2">
+            <vertical child-control-width="true" child-control-height="true" child-align="MiddleCenter" spacing="2">
+                <image src="BeatLocator.Assets.ss_logo.png" preserve-aspect="true" pref-width="12" pref-height="12" />
+                <text text="ScoreSaber" font-size="4" align="Left" word-wrap="true" />
+            </vertical>
+        </button>
+    
+    </horizontal>
+
+    <button on-click="feedbackPressed"
+            text="Feedback"
+            pref-width="83"
+            pref-height="10"
+            font-size="4" />
+
+</vertical>

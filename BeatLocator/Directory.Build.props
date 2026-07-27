@@ -1,0 +1,60 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- This file contains project properties used by the build. -->
+<Project>
+
+  <!-- Plugin Metadata -->
+  <PropertyGroup>
+    <!--
+      Build profiles are deliberately explicit: a profile identifies both the
+      target game's manifest version and the matching third-party mod set.
+      Pass -p:BeatSaberVersion=<version> to select one.
+    -->
+    <BeatSaberVersion Condition="'$(BeatSaberVersion)' == ''">1.40.8</BeatSaberVersion>
+    <Is140Family Condition="'$(BeatSaberVersion)' == '1.40.2' Or '$(BeatSaberVersion)' == '1.40.3' Or '$(BeatSaberVersion)' == '1.40.4' Or '$(BeatSaberVersion)' == '1.40.5' Or '$(BeatSaberVersion)' == '1.40.6' Or '$(BeatSaberVersion)' == '1.40.7' Or '$(BeatSaberVersion)' == '1.40.8'">true</Is140Family>
+    <DependencyProfile Condition="'$(BeatSaberVersion)' == '1.39.1'">1.39.1</DependencyProfile>
+    <DependencyProfile Condition="'$(Is140Family)' == 'true'">1.40.2-1.40.8</DependencyProfile>
+    <DependencyProfile Condition="'$(DependencyProfile)' == ''">$(BeatSaberVersion)</DependencyProfile>
+
+    <!-- Future profiles can override these properties without changing the build scripts. -->
+    <BsipaDependencyVersion Condition="'$(BsipaDependencyVersion)' == ''">^4.3.6</BsipaDependencyVersion>
+    <SiraUtilDependencyVersion Condition="'$(SiraUtilDependencyVersion)' == ''">^3.2.1</SiraUtilDependencyVersion>
+    <BetterSongSearchDependencyVersion Condition="'$(BetterSongSearchDependencyVersion)' == ''">^0.8.1</BetterSongSearchDependencyVersion>
+    <SongCoreDependencyVersion Condition="'$(SongCoreDependencyVersion)' == ''">^3.15.3</SongCoreDependencyVersion>
+    <SiraUtilDependencyVersion Condition="'$(BeatSaberVersion)' == '1.39.1'">^3.1.14</SiraUtilDependencyVersion>
+    <SongCoreDependencyVersion Condition="'$(BeatSaberVersion)' == '1.39.1'">^3.14.15</SongCoreDependencyVersion>
+
+    <BeatLocatorRoot>$(MSBuildThisFileDirectory)..\</BeatLocatorRoot>
+    <ModReferencesDir Condition="'$(ModReferencesDir)' == ''">$(BeatLocatorRoot)dependencies\$(DependencyProfile)</ModReferencesDir>
+    <HiveVersioningPath Condition="'$(HiveVersioningPath)' == ''">$(BeatSaberDir)\Libs\Hive.Versioning.dll</HiveVersioningPath>
+
+    <PluginId>BeatLocator</PluginId>
+    <PluginName>BeatLocator</PluginName>
+    <Authors>kalbuus</Authors>
+    <Version>0.0.1</Version>
+    <GameVersion>$(BeatSaberVersion)</GameVersion>
+    <Description>Mod for finding what maps to play</Description>
+    <!--<PluginIcon></PluginIcon>-->
+    <!--<ProjectSource></ProjectSource>-->
+    <!--<ProjectHome></ProjectHome>-->
+    <!--<DonateUrl></DonateUrl>-->
+  </PropertyGroup>
+
+  <!-- Plugin Dependencies -->
+  <ItemGroup>
+    <DependsOn Include="BSIPA" Version="$(BsipaDependencyVersion)"/>
+    <DependsOn Include="BeatSaberMarkupLanguage" Version="^1.12.0"/>
+    <DependsOn Include="SiraUtil" Version="$(SiraUtilDependencyVersion)"/>
+    <DependsOn Include="BetterSongSearch" Version="$(BetterSongSearchDependencyVersion)"/>
+    <DependsOn Include="SongCore" Version="$(SongCoreDependencyVersion)"/>
+  </ItemGroup>
+  
+  <PropertyGroup>
+    <BSMTProjectType>BSIPA</BSMTProjectType>
+    <GenerateManifest>true</GenerateManifest>
+  </PropertyGroup>
+  
+  <PropertyGroup Condition="'$(Configuration)' != 'Release'">
+    <DisableZipRelease>true</DisableZipRelease>
+  </PropertyGroup>
+  
+</Project>

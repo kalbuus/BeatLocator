@@ -1,0 +1,74 @@
+# Build outputs
+[Bb]in/
+[Oo]bj/
+/artifacts/
+/TestResults/
+/BenchmarkDotNet.Artifacts/
+*.log
+*.tmp
+*.bak
+*.orig
+*.nupkg
+*.snupkg
+*.coverage
+*.coveragexml
+*.trx
+
+# Downloaded third-party and game dependencies
+/dependencies/**/*.dll
+/dependencies/**/*.pdb
+/dependencies/**/*.xml
+/dependencies/**/*.zip
+
+# Local machine and MSBuild settings
+*.user
+*.user.*
+*.user.props
+!*.user.props.example
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+
+# Visual Studio, Rider, VS Code and other editors
+/.vs/
+/.idea/
+/.vscode/
+/.fleet/
+/_ReSharper*/
+*.ReSharper.user
+*.sln.iml
+*.code-workspace
+
+# Local LLM/agent instructions and state
+/.agents/
+/.codex/
+/.claude/
+/.cursor/
+/.windsurf/
+/.aider*
+/AGENTS.md
+/CLAUDE.md
+/GEMINI.md
+/codex.md
+/.github/agents/
+/.github/instructions/
+/.github/prompts/
+/.github/copilot-instructions.md
+
+# Secrets and local environment files
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.pfx
+*.p12
+secrets.json
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/

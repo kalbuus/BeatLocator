@@ -1,0 +1,99 @@
+﻿<!-- child-expand-height="false" запретит раздувать строки по вертикали -->
+<vertical child-control-height="false" child-expand-height="false" child-expand-width="false" child-align="UpperCenter" spacing="3">
+    
+    <!-- Заголовок (вернули исходный компактный вид) -->
+    <horizontal bg="panel-top" pad-left="15" pad-right="15" horizontal-fit="PreferredSize" vertical-fit="PreferredSize">
+        <text text="BeatLocator" align="Center" font-size="8"/>
+    </horizontal>
+    
+    <!-- НЕЗАВИСИМАЯ КНОПКА ВЫХОДА (ВЫРВАНА ИЗ LAYOUT) -->
+    <!-- anchor-pos-x="-4" (отступ влево от правого края), anchor-pos-y="-4" (отступ вниз от верхнего края) -->
+    <button text="X" 
+            on-click="exitPressed" 
+            ignore-layout="true" 
+            anchor-pos-x="91" 
+            anchor-pos-y="-6" 
+            pref-width="10" 
+            pref-height="10" 
+            font-size="5" />
+     
+    <!-- Первая строка: Song Difficulty -->
+    <!-- preferred-height="11" жестко держит высоту строки и не дает фону улететь вверх -->
+    <horizontal bg="round-rect-panel" 
+                pad="2"
+                preferred-width="100" 
+                preferred-height="11" 
+                child-control-width="true" 
+                child-control-height="true" 
+                child-align="MiddleCenter">
+        <text align="Left" text="Song Difficulty" />
+        <text-segments data="difficulties" select-cell="difficultySelected" size-delta-y="7" />
+    </horizontal>
+    
+    <!-- Вторая строка: Song Balance -->
+    <horizontal bg="round-rect-panel" 
+                pad="2"
+                preferred-width="100" 
+                preferred-height="11" 
+                child-control-width="true" 
+                child-control-height="true" 
+                child-align="MiddleCenter">
+        <text align="Left" text="Song Balance" />
+        <text-segments data="balance" select-cell="balanceSelected" size-delta-y="7" />
+    </horizontal>
+    
+    <horizontal preferred-width="100" preferred-height="22" child-control-width="true" child-control-height="true" child-align="MiddleCenter">
+        <vertical bg="round-rect-panel" 
+                        pad="1"
+                        preferred-width="33" 
+                        preferred-height="18" 
+                        child-control-width="true" 
+                        child-control-height="true" 
+                        child-align="MiddleCenter">
+            <text align="Center" text="Played By Me Before" />
+            <clickable-image id="played-toggle-image"
+                                 src="BeatLocator.Assets.off.png" 
+                                 on-click="togglePlayed"
+                                 preserve-aspect="true"
+                                 pref-width="6" 
+                                 pref-height="6" />
+        </vertical>
+        <vertical bg="round-rect-panel" 
+                        pad="1"
+                        preferred-width="33" 
+                        preferred-height="18" 
+                        child-control-width="true" 
+                        child-control-height="true" 
+                        child-align="MiddleCenter">
+            <text align="Center" text="Two Saber Only" />
+            <clickable-image id="two-saber-toggle-image"
+                                 src="BeatLocator.Assets.off.png" 
+                                 on-click="toggleTwoSaber"
+                                 preserve-aspect="true"
+                                 pref-width="6" 
+                                 pref-height="6" />
+        </vertical>
+        <vertical bg="round-rect-panel" 
+                        pad="1"
+                        preferred-width="33" 
+                        preferred-height="18" 
+                        child-control-width="true" 
+                        child-control-height="true" 
+                        child-align="MiddleCenter">
+            <text align="Center" text="Secret Difficulty" />
+            <clickable-image id="secret-toggle-image" 
+                                 src="BeatLocator.Assets.off.png" 
+                                 on-click="toggleSecretDifficulty" 
+                                 preserve-aspect="true"
+                                 pref-width="6" 
+                                 pref-height="6" />
+        </vertical>
+    </horizontal>
+    
+    <action-button id="find-button"
+                   text="~findButtonText" 
+                   on-click="find-btn-action" 
+                   preferred-width="95" 
+                   preferred-height="11" />
+
+</vertical>

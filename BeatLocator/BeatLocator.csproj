@@ -1,0 +1,162 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <Import Project="BeatLocator.user.props" Condition="Exists('BeatLocator.user.props')"/>
+
+    <PropertyGroup>
+        <TargetFramework>net472</TargetFramework>
+        <!-- Some features of the latest version of C# aren't available in Beat Saber. Refer to the unity docs for info -->
+        <!-- https://docs.unity3d.com/2022.3/Documentation/Manual/CSharpCompiler.html -->
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <EnableFrameworkPathOverride>true</EnableFrameworkPathOverride>
+        <FrameworkPathOverride>$(BeatSaberDir)\Beat Saber_Data\Managed</FrameworkPathOverride>
+        <MarkPackageReferencesAsExternallyResolved>false</MarkPackageReferencesAsExternallyResolved>
+        <OutputPath>bin\$(Configuration)\$(BeatSaberVersion)\</OutputPath>
+        <IntermediateOutputPath>obj\$(Configuration)\$(BeatSaberVersion)\</IntermediateOutputPath>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="BeatSaberModdingTools.Tasks" Version="2.0.0-beta7">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.5-beta1" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <EmbeddedResource Include="Assets\off.png" />
+        <EmbeddedResource Include="Assets\on.png" />
+        <EmbeddedResource Include="Menu\SettingsMenu.bsml"/>
+        <EmbeddedResource Include="Menu\SelectViewController.bsml" />
+        <EmbeddedResource Include="Menu\BeatLeaderSelect.bsml" />
+        <EmbeddedResource Include="Menu\RouletteAnimationViewController.bsml" />
+        <None Remove="Assets\bl_logo.png" />
+        <EmbeddedResource Include="Assets\bl_logo.png" />
+        <None Remove="Assets\bs_logo.png" />
+        <EmbeddedResource Include="Assets\bs_logo.png" />
+        <None Remove="Assets\ss_logo.png" />
+        <EmbeddedResource Include="Assets\ss_logo.png" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="BeatLocator.csproj.user" Condition="Exists('BeatLocator.csproj.user')"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Reference Include="BeatSaber.ViewSystem">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\BeatSaber.ViewSystem.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="BeatmapCore">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\BeatmapCore.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="BGLib.UnityExtension">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\BGLib.UnityExtension.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="BSML">
+            <HintPath>$(ModReferencesDir)\BSML.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="Colors">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\Colors.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="DataModels">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\DataModels.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="Hive.Versioning">
+            <HintPath>$(HiveVersioningPath)</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="HMUI">
+          <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\HMUI.dll</HintPath>
+          <Private>false</Private>
+        </Reference>
+        <Reference Include="IPA.Loader">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\IPA.Loader.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="Main">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\Main.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="mscorlib"/>
+        <Reference Include="netstandard">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\netstandard.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="SiraUtil">
+            <HintPath>$(ModReferencesDir)\SiraUtil.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="SongCore">
+            <HintPath>$(ModReferencesDir)\SongCore.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="System"/>
+        <Reference Include="System.Core">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\System.Core.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="System.Net.Http">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\System.Net.Http.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="Unity.TextMeshPro">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\Unity.TextMeshPro.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="UnityEngine">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="UnityEngine.CoreModule">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="UnityEngine.AudioModule">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.AudioModule.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="UnityEngine.ImageConversionModule">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.ImageConversionModule.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="UnityEngine.UI">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.UI.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="UnityEngine.UIElementsModule">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.UIElementsModule.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="UnityEngine.UnityWebRequestModule">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.UnityWebRequestModule.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="UnityEngine.UnityWebRequestAudioModule">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.UnityWebRequestAudioModule.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="UnityEngine.UnityWebRequestTextureModule">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.UnityWebRequestTextureModule.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="UnityEngine.UIModule">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.UIModule.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Zenject">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\Zenject.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="Zenject-usage">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\Zenject-usage.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+    </ItemGroup>
+
+</Project>
