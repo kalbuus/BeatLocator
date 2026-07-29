@@ -1,13 +1,9 @@
-﻿<!-- child-expand-height="false" запретит раздувать строки по вертикали -->
-<vertical child-control-height="false" child-expand-height="false" child-expand-width="false" child-align="UpperCenter" spacing="3">
+﻿<vertical child-control-height="false" child-expand-height="false" child-expand-width="false" child-align="UpperCenter" spacing="3">
     
-    <!-- Заголовок (вернули исходный компактный вид) -->
     <horizontal bg="panel-top" pad-left="15" pad-right="15" horizontal-fit="PreferredSize" vertical-fit="PreferredSize">
         <text text="BeatLocator" align="Center" font-size="8"/>
     </horizontal>
     
-    <!-- НЕЗАВИСИМАЯ КНОПКА ВЫХОДА (ВЫРВАНА ИЗ LAYOUT) -->
-    <!-- anchor-pos-x="-4" (отступ влево от правого края), anchor-pos-y="-4" (отступ вниз от верхнего края) -->
     <button text="X" 
             on-click="exitPressed" 
             ignore-layout="true" 
@@ -17,29 +13,32 @@
             pref-height="10" 
             font-size="5" />
      
-    <!-- Первая строка: Song Difficulty -->
-    <!-- preferred-height="11" жестко держит высоту строки и не дает фону улететь вверх -->
-    <horizontal bg="round-rect-panel" 
-                pad="2"
+    <!-- Song Difficulty -->
+    <horizontal pad="2"
                 preferred-width="100" 
                 preferred-height="11" 
                 child-control-width="true" 
                 child-control-height="true" 
                 child-align="MiddleCenter">
         <text align="Left" text="Song Difficulty" />
-        <text-segments data="difficulties" select-cell="difficultySelected" size-delta-y="7" />
+        <text-segments id="difficulty-segments" data="difficulties" select-cell="difficultySelected" size-delta-y="7" />
+        <image id="difficulty-selection-slider"
+               src="BeatLocator.Assets.selection_slider_bg.png"
+               ignore-layout="true" />
     </horizontal>
     
-    <!-- Вторая строка: Song Balance -->
-    <horizontal bg="round-rect-panel" 
-                pad="2"
+    <!-- Song Balance -->
+    <horizontal pad="2"
                 preferred-width="100" 
                 preferred-height="11" 
                 child-control-width="true" 
                 child-control-height="true" 
                 child-align="MiddleCenter">
         <text align="Left" text="Song Balance" />
-        <text-segments data="balance" select-cell="balanceSelected" size-delta-y="7" />
+        <text-segments id="balance-segments" data="balance" select-cell="balanceSelected" size-delta-y="7" />
+        <image id="balance-selection-slider"
+               src="BeatLocator.Assets.selection_slider_bg.png"
+               ignore-layout="true" />
     </horizontal>
     
     <horizontal preferred-width="100" preferred-height="22" child-control-width="true" child-control-height="true" child-align="MiddleCenter">

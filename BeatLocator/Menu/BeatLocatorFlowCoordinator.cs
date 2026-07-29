@@ -90,7 +90,8 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     }
 
     internal async void FindMapAsync(bool played, float starBuffer, bool onlyTwoSaber,
-                                    int mapBalance, int mapDifficulty, int count)
+                                    bool secretDifficulty, int mapBalance,
+                                    int mapDifficulty, int count)
     {
         if (_mapSearchInProgress)
         {
@@ -131,7 +132,9 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 return;
             }
 
-            _rouletteAnimationViewController.SetResult(selectedDifficulty);
+            _rouletteAnimationViewController.SetResult(
+                selectedDifficulty,
+                secretDifficulty);
             showRoulette = true;
         }
         catch (Exception exception)

@@ -13,17 +13,33 @@
             pref-height="10" 
             font-size="5" />
 
-    <horizontal child-control-height="false" child-expand-height="false" child-expand-width="false" child-align="LowerCenter" spacing="4">
-        <button on-click="bsPressed" interactable="false" 
+    <horizontal id="platform-buttons"
+                horizontal-fit="PreferredSize"
+                vertical-fit="PreferredSize"
+                preferred-width="83"
+                preferred-height="35"
+                child-control-height="false"
+                child-expand-height="false"
+                child-expand-width="false"
+                child-align="LowerCenter"
+                spacing="4">
+        <button id="beatsaver-button" on-click="bsPressed" interactable="false"
                        stroke-visible="false"
                        text=""
                        hover-hint="Coming soon"
                        preferred-width="25" 
                        preferred-height="35" 
                        pad="2">
+            <image id="beatsaver-background"
+                   src="BeatLocator.Assets.button_background.png"
+                   ignore-layout="true"
+                   anchor-min="0 0"
+                   anchor-max="1 1"
+                   anchored-position="0 0"
+                   size-delta="0 0" />
             <vertical child-control-width="true" child-control-height="true" child-align="MiddleCenter" spacing="2">
-                <image src="BeatLocator.Assets.bs_logo.png" preserve-aspect="true" pref-width="12" pref-height="12" />
-                <text text="BeatSaver" font-size="4" align="Left" word-wrap="true" />
+                <image id="beatsaver-logo" src="BeatLocator.Assets.bs_logo.png" preserve-aspect="true" pref-width="12" pref-height="12" />
+                <text id="beatsaver-label" text="BeatSaver" font-size="4" align="Left" word-wrap="true" />
             </vertical>
         </button>
     
@@ -34,22 +50,36 @@
                        preferred-width="25" 
                        preferred-height="35" 
                        pad="2">
+            <image id="beatleader-background"
+                   src="BeatLocator.Assets.button_background.png"
+                   ignore-layout="true"
+                   anchor-min="0 0"
+                   anchor-max="1 1"
+                   anchored-position="0 0"
+                   size-delta="0 0" />
             <vertical child-control-width="true" child-control-height="true" child-align="MiddleCenter" spacing="2">
-                <image src="BeatLocator.Assets.bl_logo.png" preserve-aspect="true" pref-width="12" pref-height="12" />
-                <text text="BeatLeader" font-size="4" align="Left" word-wrap="true" />
+                <image id="beatleader-logo" src="BeatLocator.Assets.bl_logo.png" preserve-aspect="true" pref-width="12" pref-height="12" />
+                <text id="beatleader-label" text="BeatLeader" font-size="4" align="Left" word-wrap="true" />
             </vertical>
         </button>
     
-        <button on-click="scPressed" interactable="false"
+        <button id="scoresaber-button" on-click="scPressed" interactable="false"
                        stroke-visible="false"
                        text=""
                        hover-hint="Coming soon"
                        preferred-width="25" 
                        preferred-height="35" 
                        pad="2">
+            <image id="scoresaber-background"
+                   src="BeatLocator.Assets.button_background.png"
+                   ignore-layout="true"
+                   anchor-min="0 0"
+                   anchor-max="1 1"
+                   anchored-position="0 0"
+                   size-delta="0 0" />
             <vertical child-control-width="true" child-control-height="true" child-align="MiddleCenter" spacing="2">
-                <image src="BeatLocator.Assets.ss_logo.png" preserve-aspect="true" pref-width="12" pref-height="12" />
-                <text text="ScoreSaber" font-size="4" align="Left" word-wrap="true" />
+                <image id="scoresaber-logo" src="BeatLocator.Assets.ss_logo.png" preserve-aspect="true" pref-width="12" pref-height="12" />
+                <text id="scoresaber-label" text="ScoreSaber" font-size="4" align="Left" word-wrap="true" />
             </vertical>
         </button>
     

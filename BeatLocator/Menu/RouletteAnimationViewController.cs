@@ -109,6 +109,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     private Coroutine? _revealCoroutine;
     private bool _coverLoaded;
     private bool _spinFinished;
+    private bool _secretDifficulty;
     private int _runId;
     private EvaluatedDifficulty? _selectedDifficulty;
     private string? _coverUrl;
@@ -137,12 +138,15 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         _config = config;
     }
 
-    internal void SetResult(EvaluatedDifficulty selectedDifficulty)
+    internal void SetResult(
+        EvaluatedDifficulty selectedDifficulty,
+        bool secretDifficulty)
     {
         _runId++;
         ReleaseSelectedMedia();
 
         _selectedDifficulty = selectedDifficulty;
+        _secretDifficulty = secretDifficulty;
         SelectCoverUrls(
             selectedDifficulty.Map.FullCoverImage,
             selectedDifficulty.Map.CoverImage);
@@ -164,6 +168,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         NotifyPropertyChanged(nameof(SongMapperText));
         NotifyPropertyChanged(nameof(SongDifficultyText));
         NotifyPropertyChanged(nameof(PrimaryButtonText));
+        UpdateDifficultyVisibility();
     }
 
     [UIAction("#post-parse")]
@@ -538,6 +543,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         ConfigureSingleLineText(_songAuthor, 3.2f, 2.1f);
         ConfigureSingleLineText(_songMapper, 3.2f, 2.1f);
         ConfigureSingleLineText(_songDifficulty, 3.2f, 2.1f);
+        UpdateDifficultyVisibility();
 
         _songDetailCanvasGroups.Clear();
         AddSongDetailCanvasGroup(_songTitleRow);
@@ -547,6 +553,14 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         AddSongDetailCanvasGroup(_songActions);
 
         _songDetails.gameObject.SetActive(false);
+    }
+
+    private void UpdateDifficultyVisibility()
+    {
+        if (_songDifficulty != null)
+        {
+            _songDifficulty.gameObject.SetActive(!_secretDifficulty);
+        }
     }
 
     private void EnforceSongDetailsBounds()
@@ -967,6 +981,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         foreach (var detailCanvasGroup in _songDetailCanvasGroups)
         {
             if (runId != _runId) yield break;
+            if (!detailCanvasGroup.gameObject.activeInHierarchy) continue;
 
             var detailTransform = (RectTransform)detailCanvasGroup.transform;
             var targetPosition = detailTransform.anchoredPosition;

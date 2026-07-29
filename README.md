@@ -2,7 +2,13 @@
 
 BeatLocator is a recommendation engine for Beat Saber, that finds songs based on your BeatLeader profile (ScoreSaber and BeatSaver integrations coming soon). 
 
-Be mindful that this is still an alpha version, so interface bugs and crashes might be present. If you find a bug in the latest version of this mod, please report it using GitHub Issues.
+Be mindful that this is still an alpha version, so interface bugs and crashes might be present. If you find a bug in the latest version of this mod, please report it using [GitHub Issues](https://github.com/kalbuus/BeatLocator/issues).
+
+## Screenshots
+
+![BeatLocator search settings](docs/images/beatlocator-settings.png)
+
+![BeatLocator selected map](docs/images/beatlocator-result.png)
 
 ## Mod Capabilities
 
@@ -43,6 +49,8 @@ The song selection works by getting your last ranked scores from BeatLeader, eva
 This mod doesn't collect or use your BeatLeader's login information (including your auth token). It uses a public API and only routes some requests through BeatLeader's mod.
 
 ## Building from Source
+
+If you want to contibute to the mod, you have to build it on your machine. If you just want to play with it, head over to [Releases](https://github.com/kalbuus/BeatLocator/releases/)
 
 ### Requirements
 
@@ -88,4 +96,3 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 The distributable DLL and ZIP are written to
 `BeatLocator/bin/Release/1.40.2-1.40.8/`.
-
