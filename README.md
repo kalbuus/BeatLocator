@@ -96,3 +96,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 The distributable DLL and ZIP are written to
 `BeatLocator/bin/Release/1.40.2-1.40.8/`.
+
+## License
+
+BeatLocator is licensed under the [MIT License](LICENSE).
