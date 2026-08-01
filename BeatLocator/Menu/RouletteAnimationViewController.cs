@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using BeatLocator.EvaluationManagers;
@@ -29,10 +30,15 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     private const float MaximumCenterScaleBonus = 0.25f;
     private const float DummyCoverShade = 0.15f;
     private const float InterfaceScale = 1.5f;
-    private const float InterfaceVerticalOffset = -8f;
+    private const float InterfaceVerticalOffset = -2.5f;
+    private const float ViewportBackgroundLightenAmount = 0.2f;
+    private const float ViewportBackgroundOpacityMultiplier = 0.5f;
     private const float SongDetailsWidth = 62f;
     private const float SongDetailsHeight = 36f;
-    private const float SubNameVerticalOffset = -0.35f;
+    private const float SongTitleVisualGap = 1f;
+    private const float MaximumSongTitleWidth = 39f;
+    private const string RouletteHitResource = "BeatLocator.Assets.roulette_hit.wav";
+    private const string RouletteStopResource = "BeatLocator.Assets.roulette_stop.wav";
 
     [UIComponent("roulette-root")]
     private RectTransform _rouletteRoot = null!;
@@ -93,7 +99,10 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     private CanvasGroup _previewOverlayCanvasGroup = null!;
     private TMP_Text _previewIcon = null!;
     private AudioSource _previewAudioSource = null!;
+    private AudioSource _rouletteAudioSource = null!;
     private AudioClip? _previewAudioClip;
+    private AudioClip? _rouletteHitClip;
+    private AudioClip? _rouletteStopClip;
     private Task<AudioClip>? _previewLoadTask;
     private bool _previewPaused;
     private bool _menuMusicPausedByPreview;
@@ -193,6 +202,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         CreateHeroCover();
         PrepareSongDetails();
         PreparePreviewAudio();
+        PrepareRouletteAudio();
     }
 
     protected override void DidActivate(
@@ -293,7 +303,14 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     private void PrepareViewport()
     {
         _viewportBackground = _viewport.GetComponent<Image>();
-        _viewportBackgroundColor = _viewportBackground.color;
+        var originalBackgroundColor = _viewportBackground.color;
+        _viewportBackgroundColor = Color.Lerp(
+            originalBackgroundColor,
+            Color.white,
+            ViewportBackgroundLightenAmount);
+        _viewportBackgroundColor.a =
+            originalBackgroundColor.a * ViewportBackgroundOpacityMultiplier;
+        _viewportBackground.color = _viewportBackgroundColor;
 
         var layoutElement = _viewport.GetComponent<LayoutElement>();
         if (layoutElement == null)
@@ -524,6 +541,24 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         _previewAudioSource.volume = 0.7f;
     }
 
+    private void PrepareRouletteAudio()
+    {
+        _rouletteAudioSource = gameObject.AddComponent<AudioSource>();
+        _rouletteAudioSource.playOnAwake = false;
+        _rouletteAudioSource.loop = false;
+        _rouletteAudioSource.volume = 1f;
+
+        try
+        {
+            _rouletteHitClip = LoadPcmWave(RouletteHitResource, "BeatLocator Roulette Hit");
+            _rouletteStopClip = LoadPcmWave(RouletteStopResource, "BeatLocator Roulette Stop");
+        }
+        catch (Exception exception)
+        {
+            Plugin.Log.Error($"Could not load roulette sounds: {exception}");
+        }
+    }
+
     private void PrepareSongDetails()
     {
         _songDetails.anchorMin = new Vector2(0.5f, 0.5f);
@@ -581,6 +616,75 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         text.overflowMode = TextOverflowModes.Ellipsis;
     }
 
+    private void LayoutSongTitleRow()
+    {
+        var titleText = _songTitle.GetComponent<TMP_Text>();
+        var subNameText = _songSubName.GetComponent<TMP_Text>();
+        titleText.alignment = TextAlignmentOptions.MidlineLeft;
+        subNameText.alignment = TextAlignmentOptions.MidlineLeft;
+        titleText.ForceMeshUpdate();
+        subNameText.ForceMeshUpdate();
+
+        var hasSubName = !string.IsNullOrWhiteSpace(SongSubNameText);
+        var maximumTitleWidth = hasSubName
+            ? MaximumSongTitleWidth
+            : SongDetailsWidth;
+        var titleWidth = Mathf.Min(
+            titleText.preferredWidth,
+            maximumTitleWidth);
+        var remainingWidth = Mathf.Max(
+            0f,
+            SongDetailsWidth - titleWidth -
+            (hasSubName ? SongTitleVisualGap : 0f));
+        var subNameWidth = hasSubName
+            ? Mathf.Min(subNameText.preferredWidth, remainingWidth)
+            : 0f;
+
+        SetPreferredWidth(_songTitle, titleWidth);
+        SetPreferredWidth(_songSubName, subNameWidth);
+        LayoutRebuilder.ForceRebuildLayoutImmediate(_songTitleRow);
+
+        if (hasSubName)
+        {
+            AdjustSongTitleRowSpacing(titleText, subNameText);
+        }
+    }
+
+    private void AdjustSongTitleRowSpacing(
+        TMP_Text titleText,
+        TMP_Text subNameText)
+    {
+        var layoutGroup = _songTitleRow.GetComponent<HorizontalLayoutGroup>();
+        if (layoutGroup == null)
+        {
+            return;
+        }
+
+        titleText.ForceMeshUpdate();
+        subNameText.ForceMeshUpdate();
+        var titleRight = _songTitleRow.InverseTransformPoint(
+            _songTitle.TransformPoint(
+                new Vector3(titleText.textBounds.max.x, 0f, 0f))).x;
+        var subNameLeft = _songTitleRow.InverseTransformPoint(
+            _songSubName.TransformPoint(
+                new Vector3(subNameText.textBounds.min.x, 0f, 0f))).x;
+        var currentVisualGap = subNameLeft - titleRight;
+
+        layoutGroup.spacing += SongTitleVisualGap - currentVisualGap;
+        LayoutRebuilder.ForceRebuildLayoutImmediate(_songTitleRow);
+    }
+
+    private static void SetPreferredWidth(
+        RectTransform target,
+        float preferredWidth)
+    {
+        var layoutElement = target.GetComponent<LayoutElement>() ??
+                            target.gameObject.AddComponent<LayoutElement>();
+        layoutElement.minWidth = 0f;
+        layoutElement.preferredWidth = preferredWidth;
+        layoutElement.flexibleWidth = 0f;
+    }
+
     private void AddSongDetailCanvasGroup(RectTransform element)
     {
         _songDetailCanvasGroups.Add(GetOrAddCanvasGroup(element.gameObject));
@@ -632,9 +736,6 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
             _coverLoadTask = null;
             _winnerCover.sprite = coverSprite;
             _coverLoaded = true;
-            Plugin.Log.Info(
-                $"Roulette cover loaded: {coverSprite.texture.width} x " +
-                $"{coverSprite.texture.height}.");
             if (_spinFinished)
             {
                 RevealWinner();
@@ -756,12 +857,14 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
             _viewport.sizeDelta = new Vector2(ViewportWidth, ViewportHeight);
         }
 
-        Plugin.Log.Info(
-            $"Roulette viewport size: {_viewport.rect.width:0.##} x {_viewport.rect.height:0.##}.");
-
         var startX = 0f;
         var targetX = GetTargetPosition(WinnerIndex);
         var elapsed = 0f;
+        var step = CardSize + CardSpacing;
+        var viewportCenter = _viewport.rect.width * 0.5f;
+        var nextPassedCard = Mathf.Max(
+            0,
+            Mathf.FloorToInt((viewportCenter - CardSize * 0.5f) / step) + 1);
 
         while (elapsed < SpinDuration * (1/_config.SpeedAnimationValue) && runId == _runId)
         {
@@ -774,6 +877,14 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
             _strip.anchoredPosition = position;
             UpdateCoverScales();
 
+            var stripCenterPosition = viewportCenter - position.x;
+            while (nextPassedCard < WinnerIndex &&
+                   CardSize * 0.5f + nextPassedCard * step <= stripCenterPosition)
+            {
+                PlayRouletteHit();
+                nextPassedCard++;
+            }
+
             yield return null;
         }
 
@@ -783,6 +894,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         finalPosition.x = targetX;
         _strip.anchoredPosition = finalPosition;
         UpdateCoverScales();
+        PlayRouletteStop();
         _spinCoroutine = null;
         _spinFinished = true;
 
@@ -829,6 +941,115 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         }
     }
 
+    private void PlayRouletteHit()
+    {
+        if (_rouletteHitClip != null)
+        {
+            _rouletteAudioSource.PlayOneShot(_rouletteHitClip);
+        }
+    }
+
+    private void PlayRouletteStop()
+    {
+        if (_rouletteStopClip == null) return;
+
+        _rouletteAudioSource.Stop();
+        _rouletteAudioSource.PlayOneShot(_rouletteStopClip);
+    }
+
+    private static AudioClip LoadPcmWave(string resourceName, string clipName)
+    {
+        using var stream = typeof(RouletteAnimationViewController).Assembly
+            .GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException(
+                $"Embedded audio '{resourceName}' was not found.");
+        using var reader = new BinaryReader(stream);
+
+        if (ReadFourCc(reader) != "RIFF")
+        {
+            throw new InvalidDataException($"Embedded audio '{resourceName}' is not a RIFF file.");
+        }
+
+        reader.ReadUInt32();
+        if (ReadFourCc(reader) != "WAVE")
+        {
+            throw new InvalidDataException($"Embedded audio '{resourceName}' is not a WAVE file.");
+        }
+
+        ushort format = 0;
+        ushort channels = 0;
+        ushort bitsPerSample = 0;
+        uint sampleRate = 0;
+        byte[]? sampleBytes = null;
+
+        while (stream.Position + 8 <= stream.Length)
+        {
+            var chunkId = ReadFourCc(reader);
+            var chunkSize = reader.ReadUInt32();
+            var nextChunk = stream.Position + chunkSize;
+            if (nextChunk > stream.Length)
+            {
+                throw new InvalidDataException(
+                    $"Embedded audio '{resourceName}' contains a truncated chunk.");
+            }
+
+            if (chunkId == "fmt ")
+            {
+                if (chunkSize < 16)
+                {
+                    throw new InvalidDataException(
+                        $"Embedded audio '{resourceName}' has an invalid format chunk.");
+                }
+
+                format = reader.ReadUInt16();
+                channels = reader.ReadUInt16();
+                sampleRate = reader.ReadUInt32();
+                reader.ReadUInt32();
+                reader.ReadUInt16();
+                bitsPerSample = reader.ReadUInt16();
+            }
+            else if (chunkId == "data")
+            {
+                sampleBytes = reader.ReadBytes(checked((int)chunkSize));
+            }
+
+            stream.Position = nextChunk + (chunkSize & 1);
+        }
+
+        if (format != 1 || channels == 0 || sampleRate == 0 || bitsPerSample != 16 ||
+            sampleBytes == null)
+        {
+            throw new InvalidDataException(
+                $"Embedded audio '{resourceName}' must be 16-bit PCM WAV.");
+        }
+
+        var samples = new float[sampleBytes.Length / sizeof(short)];
+        for (var index = 0; index < samples.Length; index++)
+        {
+            samples[index] = BitConverter.ToInt16(sampleBytes, index * sizeof(short)) / 32768f;
+        }
+
+        var clip = AudioClip.Create(
+            clipName,
+            samples.Length / channels,
+            channels,
+            checked((int)sampleRate),
+            false);
+        if (!clip.SetData(samples, 0))
+        {
+            Destroy(clip);
+            throw new InvalidOperationException(
+                $"Could not populate embedded audio '{resourceName}'.");
+        }
+
+        return clip;
+    }
+
+    private static string ReadFourCc(BinaryReader reader)
+    {
+        return new string(reader.ReadChars(4));
+    }
+
     private void ResetWinnerPlaceholder()
     {
         var winnerCard = _dummyCovers[WinnerIndex];
@@ -864,9 +1085,6 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
 
     private void RevealWinner()
     {
-        Plugin.Log.Info(
-            $"Revealing roulette cover for {SongTitleText}; " +
-            $"sprite assigned: {_winnerCover.sprite != null}.");
         SetStatus(SongTitleText);
         _revealCoroutine = StartCoroutine(FadeInWinner(_runId));
     }
@@ -973,10 +1191,8 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         Canvas.ForceUpdateCanvases();
         EnforceSongDetailsBounds();
         LayoutRebuilder.ForceRebuildLayoutImmediate(_songDetails);
+        LayoutSongTitleRow();
         EnforceSongDetailsBounds();
-        var subNamePosition = _songSubName.anchoredPosition;
-        subNamePosition.y = _songTitle.anchoredPosition.y + SubNameVerticalOffset;
-        _songSubName.anchoredPosition = subNamePosition;
 
         foreach (var detailCanvasGroup in _songDetailCanvasGroups)
         {
@@ -1221,7 +1437,6 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
             if (IsWebpUrl(fullCoverUrl) && coverUrl != null && coverUrl.Trim().Length > 0)
             {
                 _coverUrl = coverUrl;
-                Plugin.Log.Info("Using the JPEG cover because the full cover is WebP.");
                 return;
             }
 
@@ -1291,6 +1506,11 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
 
     private void StopAnimations()
     {
+        if (_rouletteAudioSource != null)
+        {
+            _rouletteAudioSource.Stop();
+        }
+
         if (_spinCoroutine != null)
         {
             StopCoroutine(_spinCoroutine);
@@ -1335,6 +1555,16 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         if (_previewAudioClip != null)
         {
             Destroy(_previewAudioClip);
+        }
+
+        if (_rouletteHitClip != null)
+        {
+            Destroy(_rouletteHitClip);
+        }
+
+        if (_rouletteStopClip != null)
+        {
+            Destroy(_rouletteStopClip);
         }
 
         base.OnDestroy();

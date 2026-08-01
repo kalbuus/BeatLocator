@@ -37,6 +37,5 @@ internal class Plugin
         // Instructs SiraUtil to use this installer when the main menu initializes
         zenjector.Install<MenuInstaller>(Location.Menu);
 
-        Log.Info($"{pluginMetadata.Name} initialized.");
     }
 }

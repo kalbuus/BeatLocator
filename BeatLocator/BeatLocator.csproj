@@ -38,8 +38,14 @@
         <EmbeddedResource Include="Assets\ss_logo.png" />
         <None Remove="Assets\button_background.png" />
         <EmbeddedResource Include="Assets\button_background.png" />
-        <None Remove="Assets\selection_slider_bg.png" />
-        <EmbeddedResource Include="Assets\selection_slider_bg.png" />
+        <None Remove="Assets\9slice_bg.png" />
+        <EmbeddedResource Include="Assets\9slice_bg.png" />
+        <None Remove="Assets\x_mark.png" />
+        <EmbeddedResource Include="Assets\x_mark.png" />
+        <None Remove="Assets\roulette_hit.wav" />
+        <EmbeddedResource Include="Assets\roulette_hit.wav" />
+        <None Remove="Assets\roulette_stop.wav" />
+        <EmbeddedResource Include="Assets\roulette_stop.wav" />
     </ItemGroup>
 
     <ItemGroup>

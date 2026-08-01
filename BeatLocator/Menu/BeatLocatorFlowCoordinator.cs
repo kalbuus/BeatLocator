@@ -24,6 +24,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 {
     private const int MapSearchTimeoutMilliseconds = 45000;
     private const int MapDownloadTimeoutMilliseconds = 120000;
+    private const float LaunchFadeDurationSeconds = 0.15f;
 
     private MainFlowCoordinator _mainFlowCoordinator = null!;
     private SoloFreePlayFlowCoordinator _soloFreePlayFlowCoordinator = null!;
@@ -31,7 +32,10 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     private BeatLeaderSelect _beatLeaderSelect = null!;
     private RouletteAnimationViewController _rouletteAnimationViewController = null!;
     private bool _mapSearchInProgress;
+    private CancellationTokenSource? _mapSearchCancellationSource;
     private bool _mapDownloadInProgress;
+    private object? _fadeInOutController;
+    private bool _launchFadeActive;
     private PluginConfig? _config;
 
     [Inject]
@@ -49,6 +53,17 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         _beatLeaderSelect = beatLeaderSelect;
         _rouletteAnimationViewController = rouletteAnimationViewController;
         _config = config;
+
+        _fadeInOutController = typeof(MainFlowCoordinator).GetField(
+                "_fadeInOut",
+                BindingFlags.NonPublic | BindingFlags.Instance)
+            ?.GetValue(mainFlowCoordinator);
+        if (_fadeInOutController == null)
+        {
+            Plugin.Log.Warn(
+                "Could not find Beat Saber's menu fade controller; " +
+                "the level launch transition will use the default timing.");
+        }
     }
 
     internal void Present()
@@ -71,7 +86,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     internal void ShowSelect()
     {
-        if (_mapSearchInProgress) return;
+        CancelMapSearch();
 
         ReplaceTopViewController(
             _selectViewController,
@@ -100,35 +115,31 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         }
 
         _mapSearchInProgress = true;
+        var cancellationSource = new CancellationTokenSource();
+        _mapSearchCancellationSource = cancellationSource;
         var showRoulette = false;
 
         try
         {
-            var searchTask = BLEvaluationManager.FindMapsAsync(
+            using var timeoutSource =
+                new CancellationTokenSource(MapSearchTimeoutMilliseconds);
+            using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationSource.Token,
+                timeoutSource.Token);
+
+            await BLEvaluationManager.FindMapsAsync(
                 played,
                 starBuffer,
                 onlyTwoSaber,
                 mapBalance,
                 mapDifficulty,
                 count,
-                _config);
-
-            var completedTask = await Task.WhenAny(
-                searchTask,
-                Task.Delay(MapSearchTimeoutMilliseconds));
-
-            if (completedTask != searchTask)
-            {
-                Plugin.Log.Error("BeatLeader map search timed out after 45 seconds.");
-                return;
-            }
-
-            await searchTask;
+                _config,
+                linkedSource.Token);
 
             var selectedDifficulty = BLEvaluationManager.SelectedDifficulty;
             if (selectedDifficulty == null)
             {
-                Plugin.Log.Warn("The map search did not select a difficulty.");
                 return;
             }
 
@@ -137,20 +148,40 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 secretDifficulty);
             showRoulette = true;
         }
+        catch (OperationCanceledException) when (cancellationSource.IsCancellationRequested)
+        {
+        }
+        catch (OperationCanceledException)
+        {
+            Plugin.Log.Error("BeatLeader map search timed out after 45 seconds.");
+        }
         catch (Exception exception)
         {
             Plugin.Log.Error($"Unexpected error while finding maps: {exception}");
         }
         finally
         {
-            _mapSearchInProgress = false;
-            _beatLeaderSelect.SetSearchInProgress(false);
+            var wasCanceled = cancellationSource.IsCancellationRequested;
 
-            if (showRoulette)
+            if (ReferenceEquals(_mapSearchCancellationSource, cancellationSource))
+            {
+                _mapSearchCancellationSource = null;
+                _mapSearchInProgress = false;
+                _beatLeaderSelect.SetSearchInProgress(false);
+            }
+
+            cancellationSource.Dispose();
+
+            if (showRoulette && !wasCanceled)
             {
                 ShowRoulette();
             }
         }
+    }
+
+    private void CancelMapSearch()
+    {
+        _mapSearchCancellationSource?.Cancel();
     }
 
     internal async Task<MapDownloadOutcome> DownloadMapAsync(EvaluatedDifficulty selectedDifficulty)
@@ -201,12 +232,14 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 in key,
                 resolvedLevel.Level);
 
+            await FadeOutBeforeSoloFlowAsync(resolvedLevel);
             _soloFreePlayFlowCoordinator.Setup(state);
             StopRouletteAndPresentSoloFlow(resolvedLevel);
             return true;
         }
         catch (Exception exception)
         {
+            FadeBackInAfterLaunchFailure();
             Plugin.Log.Error($"Could not start the selected Beat Saber level: {exception}");
             return false;
         }
@@ -234,32 +267,89 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 _soloFreePlayFlowCoordinator,
                 resolvedLevel);
             PressSoloPlayButton();
+            _launchFadeActive = false;
         }
         catch (Exception exception)
         {
+            FadeBackInAfterLaunchFailure();
             Plugin.Log.Error($"Could not select the requested difficulty: {exception}");
         }
     }
 
     private void PressSoloPlayButton()
     {
+        var playMethod = typeof(SinglePlayerLevelSelectionFlowCoordinator).GetMethod(
+            "ActionButtonWasPressed",
+            BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? throw new MissingMethodException(
+                nameof(SinglePlayerLevelSelectionFlowCoordinator),
+                "ActionButtonWasPressed");
+
+        // Use the same handler as the real Play button so 90/360 degree prompts
+        // and the player's current modifiers/settings behave normally.
+        playMethod.Invoke(_soloFreePlayFlowCoordinator, null);
+    }
+
+    private Task FadeOutBeforeSoloFlowAsync(
+        BeatSaberLevelLauncher.ResolvedLevel resolvedLevel)
+    {
+        if (_fadeInOutController == null || RequiresMovementPrompt(resolvedLevel.Key))
+        {
+            return Task.CompletedTask;
+        }
+
+        var fadeOutMethod = _fadeInOutController.GetType().GetMethod(
+            "FadeOut",
+            BindingFlags.Public | BindingFlags.Instance,
+            null,
+            new[] { typeof(float), typeof(Action) },
+            null)
+            ?? throw new MissingMethodException(
+                _fadeInOutController.GetType().Name,
+                "FadeOut(float, Action)");
+        var completionSource = new TaskCompletionSource<bool>();
+        _launchFadeActive = true;
+        fadeOutMethod.Invoke(
+            _fadeInOutController,
+            new object[]
+            {
+                LaunchFadeDurationSeconds,
+                new Action(() => completionSource.TrySetResult(true))
+            });
+        return completionSource.Task;
+    }
+
+    private void FadeBackInAfterLaunchFailure()
+    {
+        if (!_launchFadeActive || _fadeInOutController == null) return;
+
+        _launchFadeActive = false;
         try
         {
-            var playMethod = typeof(SinglePlayerLevelSelectionFlowCoordinator).GetMethod(
-                "ActionButtonWasPressed",
-                BindingFlags.NonPublic | BindingFlags.Instance)
+            var fadeInMethod = _fadeInOutController.GetType().GetMethod(
+                "FadeIn",
+                BindingFlags.Public | BindingFlags.Instance,
+                null,
+                new[] { typeof(float) },
+                null)
                 ?? throw new MissingMethodException(
-                    nameof(SinglePlayerLevelSelectionFlowCoordinator),
-                    "ActionButtonWasPressed");
-
-            // Use the same handler as the real Play button so 90/360 degree prompts
-            // and the player's current modifiers/settings behave normally.
-            playMethod.Invoke(_soloFreePlayFlowCoordinator, null);
+                    _fadeInOutController.GetType().Name,
+                    "FadeIn(float)");
+            fadeInMethod.Invoke(
+                _fadeInOutController,
+                new object[] { LaunchFadeDurationSeconds });
         }
         catch (Exception exception)
         {
-            Plugin.Log.Error($"Beat Saber's Play action failed: {exception}");
+            Plugin.Log.Error($"Could not restore the menu fade after launch failure: {exception}");
         }
+    }
+
+    private static bool RequiresMovementPrompt(BeatmapKey key)
+    {
+        var characteristic = key.beatmapCharacteristic?.serializedName ?? string.Empty;
+        return characteristic.StartsWith("90", StringComparison.OrdinalIgnoreCase) ||
+               characteristic.StartsWith("360", StringComparison.OrdinalIgnoreCase);
     }
 
     internal void Exit()
@@ -285,10 +375,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     {
         if (topViewController == _beatLeaderSelect)
         {
-            if (!_mapSearchInProgress)
-            {
-                ShowSelect();
-            }
+            ShowSelect();
             return;
         }
 

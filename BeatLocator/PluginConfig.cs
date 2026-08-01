@@ -24,6 +24,16 @@ internal class PluginConfig
 
     public virtual bool isEndMePossible { get; set; } = true;
 
+    public virtual int BeatLeaderDifficultySelection { get; set; } = 0;
+
+    public virtual int BeatLeaderBalanceSelection { get; set; } = 0;
+
+    public virtual bool BeatLeaderPlayedEnabled { get; set; } = false;
+
+    public virtual bool BeatLeaderTwoSaberEnabled { get; set; } = false;
+
+    public virtual bool BeatLeaderSecretDifficultyEnabled { get; set; } = false;
+
     /*
     /// <summary>
     /// This is called whenever BSIPA reads the config from disk (including when file changes are detected).

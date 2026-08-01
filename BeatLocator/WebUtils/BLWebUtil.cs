@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Net.Http;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using IPA.Loader;
 using IPA.Utilities.Async;
@@ -24,15 +25,22 @@ public static class BLWebUtil
     /// Waits for BeatLeader to finish its normal sign-in/profile request and then loads
     /// scores for the signed-in BeatLeader account.
     /// </summary>
-    public static async Task<List<ScoreEntry>?> FetchCurrentUserScoresAsync(int playNumber)
+    public static async Task<List<ScoreEntry>?> FetchCurrentUserScoresAsync(
+        int playNumber,
+        CancellationToken cancellationToken = default)
     {
-        userId = await GetBeatLeaderUserIdAsync().ConfigureAwait(false);
-        if (userId != null) return await FetchScoresAsync(userId, playNumber).ConfigureAwait(false);
+        userId = await GetBeatLeaderUserIdAsync(cancellationToken).ConfigureAwait(false);
+        if (userId != null)
+        {
+            return await FetchScoresAsync(userId, playNumber, cancellationToken)
+                .ConfigureAwait(false);
+        }
         Plugin.Log.Warn("BeatLeader user ID was not available; scores were not requested.");
         return null;
     }
 
-    private static async Task<string?> GetBeatLeaderUserIdAsync()
+    private static async Task<string?> GetBeatLeaderUserIdAsync(
+        CancellationToken cancellationToken)
     {
         // ProfileManager receives /user/modinterface after BeatLeader's login succeeds.
         // Its public TryGetUserId method avoids reading cookies or duplicating the auth flow.
@@ -42,6 +50,7 @@ public static class BLWebUtil
 
         for (var attempt = 0; attempt < 120; attempt++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var beatLeader = PluginManager.GetPluginFromId(pluginId);
             var profileManager = beatLeader?.Assembly.GetType(profileManagerTypeName);
             var tryGetUserId = profileManager?.GetMethod(
@@ -58,13 +67,16 @@ public static class BLWebUtil
                 }
             }
 
-            await Task.Delay(250).ConfigureAwait(false);
+            await Task.Delay(250, cancellationToken).ConfigureAwait(false);
         }
 
         return null;
     }
 
-    private static async Task<List<ScoreEntry>?> FetchScoresAsync(string userId, int playNumber)
+    private static async Task<List<ScoreEntry>?> FetchScoresAsync(
+        string userId,
+        int playNumber,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -74,8 +86,10 @@ public static class BLWebUtil
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
             request.Headers.TryAddWithoutValidation("Accept", "text/plain");
 
-            using var response = await HttpClient.SendAsync(request).ConfigureAwait(false);
+            using var response = await HttpClient.SendAsync(request, cancellationToken)
+                .ConfigureAwait(false);
             var responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (!response.IsSuccessStatusCode)
             {
@@ -90,6 +104,10 @@ public static class BLWebUtil
             Plugin.Log.Error($"Error parsing the BL's response: {responseBody}");
             return null;
 
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception exception)
         {
@@ -106,7 +124,8 @@ public static class BLWebUtil
         int mapBalance,
         int mapDifficulty,
         int count,
-        PluginConfig config)
+        PluginConfig config,
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -152,7 +171,8 @@ public static class BLWebUtil
             // This goes through BeatLeader.NetworkingUtils, which calls its own
             // Authentication.EnsureLoggedIn before sending the UnityWebRequest.
             // BeatLocator does not read platform tickets or session cookies.
-            var responseBody = await SendAuthenticatedBeatLeaderRequestAsync(uri).ConfigureAwait(false);
+            var responseBody = await SendAuthenticatedBeatLeaderRequestAsync(uri, cancellationToken)
+                .ConfigureAwait(false);
             var result = JsonConvert.DeserializeObject<MapsResponse>(responseBody);
 
             var maps = result?.Data ?? new List<MapEntry>();
@@ -172,6 +192,10 @@ public static class BLWebUtil
             maps.RemoveAll(map => map.Difficulties == null || map.Difficulties.Count == 0);
 
             return maps;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception exception)
         {
@@ -196,7 +220,9 @@ public static class BLWebUtil
             ?? throw new InvalidOperationException("BeatLeader did not provide an API URL.");
     }
 
-    private static async Task<string> SendAuthenticatedBeatLeaderRequestAsync(string uri)
+    private static async Task<string> SendAuthenticatedBeatLeaderRequestAsync(
+        string uri,
+        CancellationToken cancellationToken)
     {
         const string networkingUtilsTypeName = "BeatLeader.API.NetworkingUtils";
         const string rawGetDescriptorTypeName = "BeatLeader.API.RequestDescriptors.RawGetRequestDescriptor";
@@ -224,26 +250,71 @@ public static class BLWebUtil
             new object?[] { descriptor, onSuccess, onFail, 1, 30 }) as IEnumerator
             ?? throw new InvalidOperationException("BeatLeader returned an unexpected coroutine.");
 
-        var requestTask = AwaitAuthenticatedResponseAsync(coroutine, completionSource.Task);
-        var completedTask = await Task.WhenAny(
-            requestTask,
-            Task.Delay(AuthenticatedRequestTimeoutMilliseconds)).ConfigureAwait(false);
-
-        if (completedTask != requestTask)
+        using var timeoutSource =
+            new CancellationTokenSource(AuthenticatedRequestTimeoutMilliseconds);
+        using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            timeoutSource.Token);
+        using var registration = linkedSource.Token.Register(() =>
         {
-            throw new TimeoutException("BeatLeader did not complete the authenticated request within 40 seconds.");
-        }
+            completionSource.TrySetCanceled();
 
-        var responseBytes = await requestTask.ConfigureAwait(false);
-        return System.Text.Encoding.UTF8.GetString(responseBytes);
+            try
+            {
+                (coroutine as IDisposable)?.Dispose();
+            }
+            catch (Exception exception)
+            {
+                Plugin.Log.Warn(
+                    $"Could not dispose the canceled BeatLeader request coroutine: {exception}");
+            }
+        });
+
+        try
+        {
+            var responseBytes = await AwaitAuthenticatedResponseAsync(
+                    coroutine,
+                    completionSource.Task)
+                .ConfigureAwait(false);
+            return System.Text.Encoding.UTF8.GetString(responseBytes);
+        }
+        catch (OperationCanceledException) when (
+            timeoutSource.IsCancellationRequested &&
+            !cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                "BeatLeader did not complete the authenticated request within 40 seconds.");
+        }
     }
 
     private static async Task<byte[]> AwaitAuthenticatedResponseAsync(
         IEnumerator coroutine,
         Task<byte[]> responseTask)
     {
-        await Coroutines.AsTask(coroutine).ConfigureAwait(false);
+        var coroutineTask = Coroutines.AsTask(coroutine);
+        var completedTask = await Task.WhenAny(coroutineTask, responseTask)
+            .ConfigureAwait(false);
+
+        if (completedTask == responseTask)
+        {
+            ObserveLateCoroutineFailure(coroutineTask);
+            return await responseTask.ConfigureAwait(false);
+        }
+
+        await coroutineTask.ConfigureAwait(false);
         return await responseTask.ConfigureAwait(false);
+    }
+
+    private static void ObserveLateCoroutineFailure(Task coroutineTask)
+    {
+        coroutineTask.ContinueWith(
+            task =>
+            {
+                _ = task.Exception;
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default);
     }
 
     #region SCORE JSON

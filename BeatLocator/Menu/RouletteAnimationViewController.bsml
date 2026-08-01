@@ -21,13 +21,14 @@
             <horizontal id="song-title-row"
                         preferred-width="62"
                         preferred-height="6"
-                        spacing="1"
+                        spacing="0"
                         child-control-width="true"
                         child-control-height="true"
                         child-expand-width="false"
-                        child-expand-height="false">
-                <text id="song-title" text="~songTitleText" align="Left" font-size="5.5" preferred-width="39" preferred-height="6" />
-                <text id="song-sub-name" text="~songSubNameText" align="Left" font-size="2.8" color="#888888" preferred-width="22" preferred-height="6" />
+                        child-expand-height="false"
+                        child-align="MiddleLeft">
+                <text id="song-title" text="~songTitleText" align="MidlineLeft" font-size="5.5" preferred-width="39" preferred-height="6" />
+                <text id="song-sub-name" text="~songSubNameText" align="MidlineLeft" font-size="2.8" color="#888888" preferred-width="22" preferred-height="6" />
             </horizontal>
             <text id="song-author" text="~songAuthorText" align="Left" font-size="3.2" preferred-height="4.5" />
             <text id="song-mapper" text="~songMapperText" align="Left" font-size="3.2" preferred-height="4.5" />

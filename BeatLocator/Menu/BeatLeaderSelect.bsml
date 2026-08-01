@@ -4,14 +4,25 @@
         <text text="BeatLocator" align="Center" font-size="8"/>
     </horizontal>
     
-    <button text="X" 
+    <button id="exit-button"
+            text=""
             on-click="exitPressed" 
+            stroke-visible="false"
             ignore-layout="true" 
             anchor-pos-x="91" 
             anchor-pos-y="-6" 
-            pref-width="10" 
-            pref-height="10" 
-            font-size="5" />
+            pref-width="6.7" 
+            pref-height="6.7" 
+            size-delta="6.7 6.7"
+            pad="0">
+        <image id="exit-icon"
+               ignore-layout="true"
+               anchor-min="0.5 0.5"
+               anchor-max="0.5 0.5"
+               anchored-position="0 0"
+               size-delta="3 3"
+               preserve-aspect="true" />
+    </button>
      
     <!-- Song Difficulty -->
     <horizontal pad="2"
@@ -20,10 +31,9 @@
                 child-control-width="true" 
                 child-control-height="true" 
                 child-align="MiddleCenter">
-        <text align="Left" text="Song Difficulty" />
+        <text align="Left" text="Difficulty" color="#9E9E9E" />
         <text-segments id="difficulty-segments" data="difficulties" select-cell="difficultySelected" size-delta-y="7" />
         <image id="difficulty-selection-slider"
-               src="BeatLocator.Assets.selection_slider_bg.png"
                ignore-layout="true" />
     </horizontal>
     
@@ -34,59 +44,59 @@
                 child-control-width="true" 
                 child-control-height="true" 
                 child-align="MiddleCenter">
-        <text align="Left" text="Song Balance" />
+        <text align="Left" text="Balance" color="#9E9E9E" />
         <text-segments id="balance-segments" data="balance" select-cell="balanceSelected" size-delta-y="7" />
         <image id="balance-selection-slider"
-               src="BeatLocator.Assets.selection_slider_bg.png"
                ignore-layout="true" />
     </horizontal>
     
-    <horizontal preferred-width="100" preferred-height="22" child-control-width="true" child-control-height="true" child-align="MiddleCenter">
-        <vertical bg="round-rect-panel" 
-                        pad="1"
-                        preferred-width="33" 
-                        preferred-height="18" 
-                        child-control-width="true" 
-                        child-control-height="true" 
-                        child-align="MiddleCenter">
-            <text align="Center" text="Played By Me Before" />
-            <clickable-image id="played-toggle-image"
-                                 src="BeatLocator.Assets.off.png" 
-                                 on-click="togglePlayed"
-                                 preserve-aspect="true"
-                                 pref-width="6" 
-                                 pref-height="6" />
-        </vertical>
-        <vertical bg="round-rect-panel" 
-                        pad="1"
-                        preferred-width="33" 
-                        preferred-height="18" 
-                        child-control-width="true" 
-                        child-control-height="true" 
-                        child-align="MiddleCenter">
-            <text align="Center" text="Two Saber Only" />
-            <clickable-image id="two-saber-toggle-image"
-                                 src="BeatLocator.Assets.off.png" 
-                                 on-click="toggleTwoSaber"
-                                 preserve-aspect="true"
-                                 pref-width="6" 
-                                 pref-height="6" />
-        </vertical>
-        <vertical bg="round-rect-panel" 
-                        pad="1"
-                        preferred-width="33" 
-                        preferred-height="18" 
-                        child-control-width="true" 
-                        child-control-height="true" 
-                        child-align="MiddleCenter">
-            <text align="Center" text="Secret Difficulty" />
-            <clickable-image id="secret-toggle-image" 
-                                 src="BeatLocator.Assets.off.png" 
-                                 on-click="toggleSecretDifficulty" 
-                                 preserve-aspect="true"
-                                 pref-width="6" 
-                                 pref-height="6" />
-        </vertical>
+    <horizontal preferred-width="100"
+                preferred-height="7"
+                child-control-width="false"
+                child-control-height="false"
+                child-expand-width="false"
+                child-expand-height="false"
+                child-align="MiddleCenter"
+                spacing="1.5">
+        <button id="played-toggle-button"
+                text=""
+                stroke-visible="false"
+                on-click="togglePlayed"
+                preferred-width="32"
+                preferred-height="7"
+                pad="0">
+            <text id="played-toggle-label"
+                  align="Center"
+                  text="Played By Me Before"
+                  font-size="3.1"
+                  word-wrap="false" />
+        </button>
+        <button id="two-saber-toggle-button"
+                text=""
+                stroke-visible="false"
+                on-click="toggleTwoSaber"
+                preferred-width="32"
+                preferred-height="7"
+                pad="0">
+            <text id="two-saber-toggle-label"
+                  align="Center"
+                  text="Two Saber Only"
+                  font-size="3.1"
+                  word-wrap="false" />
+        </button>
+        <button id="secret-toggle-button"
+                text=""
+                stroke-visible="false"
+                on-click="toggleSecretDifficulty"
+                preferred-width="32"
+                preferred-height="7"
+                pad="0">
+            <text id="secret-toggle-label"
+                  align="Center"
+                  text="Secret Difficulty"
+                  font-size="3.1"
+                  word-wrap="false" />
+        </button>
     </horizontal>
     
     <action-button id="find-button"

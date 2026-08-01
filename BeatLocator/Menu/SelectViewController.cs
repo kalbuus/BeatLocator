@@ -1,3 +1,6 @@
+using System;
+using System.Collections;
+using System.IO;
 using BeatSaberMarkupLanguage.Attributes;
 using BeatSaberMarkupLanguage.Components;
 using BeatSaberMarkupLanguage.ViewControllers;
@@ -14,6 +17,17 @@ public class SelectViewController : BSMLAutomaticViewController
 {
     private const string FeedbackUrl =
         "https://docs.google.com/forms/d/e/1FAIpQLScuMAm1XBrDSmW3VGs5oYQw_WkMC3xXz_o9N_OV9fYRN0LJzQ/viewform?usp=sharing&ouid=110581073513055024563";
+    private const string NineSliceResource =
+        "BeatLocator.Assets.9slice_bg.png";
+    private const string ExitIconResource =
+        "BeatLocator.Assets.x_mark.png";
+
+    [UIComponent("exit-button")]
+    private Button _exitButton = null!;
+    [UIComponent("exit-icon")]
+    private Image _exitIcon = null!;
+    [UIComponent("menu-root")]
+    private RectTransform _menuRoot = null!;
 
     [UIComponent("beatsaver-button")]
     private Button _beatSaverButton = null!;
@@ -45,6 +59,8 @@ public class SelectViewController : BSMLAutomaticViewController
     public string BeatLeaderButtonHover => IsBeatLeaderInstalled ? "Play BL's Rating Maps Based On Your Skills" : "BeatLeader Mod Is Not Installed";
 
     private BeatLocatorFlowCoordinator _flowCoordinator = null!;
+    private Sprite? _nineSliceSprite;
+    private Sprite? _exitIconSprite;
 
     [Inject]
     private void Construct(BeatLocatorFlowCoordinator flowCoordinator)
@@ -55,6 +71,16 @@ public class SelectViewController : BSMLAutomaticViewController
     [UIAction("#post-parse")]
     private void PostParse()
     {
+        _nineSliceSprite ??= LoadSprite(NineSliceResource);
+        _exitIconSprite ??= LoadSprite(ExitIconResource);
+        var exitVisual = _exitButton.gameObject
+            .AddComponent<ExitButtonVisual>();
+        exitVisual.Initialize(
+            _exitButton,
+            _exitIcon,
+            _nineSliceSprite,
+            _exitIconSprite);
+
         _beatLeaderButton.interactable = IsBeatLeaderInstalled;
 
         RemoveNativeButtonBackground(
@@ -72,6 +98,37 @@ public class SelectViewController : BSMLAutomaticViewController
             _scoreSaberBackground,
             _scoreSaberLogo,
             _scoreSaberLabel);
+    }
+
+    protected override void DidActivate(
+        bool firstActivation,
+        bool addedToHierarchy,
+        bool screenSystemEnabling)
+    {
+        base.DidActivate(
+            firstActivation,
+            addedToHierarchy,
+            screenSystemEnabling);
+        ForceMenuLayoutRebuild();
+        StartCoroutine(RebuildMenuLayoutNextFrame());
+    }
+
+    private IEnumerator RebuildMenuLayoutNextFrame()
+    {
+        yield return null;
+        ForceMenuLayoutRebuild();
+    }
+
+    private void ForceMenuLayoutRebuild()
+    {
+        if (!_menuRoot)
+        {
+            return;
+        }
+
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(_menuRoot);
+        Canvas.ForceUpdateCanvases();
     }
 
     private static void RemoveNativeButtonBackground(
@@ -154,5 +211,33 @@ public class SelectViewController : BSMLAutomaticViewController
     private void OnExitPressed()
     {
         _flowCoordinator.Exit();
+    }
+
+    private static Sprite LoadSprite(string resourceName)
+    {
+        using var stream = typeof(SelectViewController).Assembly
+            .GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException(
+                $"Embedded image '{resourceName}' was not found.");
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+
+        var texture = new Texture2D(
+            2,
+            2,
+            TextureFormat.RGBA32,
+            false);
+        if (!texture.LoadImage(buffer.ToArray()))
+        {
+            UnityEngine.Object.Destroy(texture);
+            throw new InvalidOperationException(
+                $"Could not load image '{resourceName}'.");
+        }
+
+        return Sprite.Create(
+            texture,
+            new Rect(0, 0, texture.width, texture.height),
+            new Vector2(0.5f, 0.5f),
+            100f);
     }
 }

@@ -1,17 +1,28 @@
-<vertical child-control-height="false" child-expand-height="false" child-expand-width="false" child-align="UpperCenter" spacing="3">
+<vertical id="menu-root" child-control-height="false" child-expand-height="false" child-expand-width="false" child-align="UpperCenter" spacing="3">
     
     <horizontal bg="panel-top" pad-left="15" pad-right="15" horizontal-fit="PreferredSize" vertical-fit="PreferredSize">
         <text text="BeatLocator" align="Center" font-size="8"/>
     </horizontal>
     
-    <button text="X" 
+    <button id="exit-button"
+            text=""
             on-click="exitPressed" 
+            stroke-visible="false"
             ignore-layout="true" 
             anchor-pos-x="91" 
             anchor-pos-y="-6" 
-            pref-width="10" 
-            pref-height="10" 
-            font-size="5" />
+            pref-width="6.7" 
+            pref-height="6.7" 
+            size-delta="6.7 6.7"
+            pad="0">
+        <image id="exit-icon"
+               ignore-layout="true"
+               anchor-min="0.5 0.5"
+               anchor-max="0.5 0.5"
+               anchored-position="0 0"
+               size-delta="3 3"
+               preserve-aspect="true" />
+    </button>
 
     <horizontal id="platform-buttons"
                 horizontal-fit="PreferredSize"

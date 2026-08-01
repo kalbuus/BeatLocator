@@ -29,7 +29,6 @@ internal static class BetterSongSearchDownloadManager
         var hash = GetMapHash(map);
         if (IsMapInstalled(hash))
         {
-            Plugin.Log.Info($"Map {hash} is already installed; skipping download.");
             return false;
         }
 
@@ -58,9 +57,6 @@ internal static class BetterSongSearchDownloadManager
         SetField(entryType, entry, "hash", hash);
         SetField(entryType, entry, "downloadProgress", 1f);
 
-        Plugin.Log.Info(
-            $"Starting BetterSongSearch download for {map.Name ?? "<unnamed map>"} ({hash}).");
-
         Task downloadTask;
         try
         {
@@ -78,8 +74,6 @@ internal static class BetterSongSearchDownloadManager
 
         await downloadTask;
         RefreshSongCore();
-
-        Plugin.Log.Info($"BetterSongSearch downloaded {map.Name ?? "<unnamed map>"}.");
         return true;
     }
 

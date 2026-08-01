@@ -72,7 +72,6 @@ internal class SettingsMenu
     private void PostParse()
     {
         UpdateMaximumSongDurationOptions();
-        Plugin.Log.Debug($"{nameof(SettingsMenu)} parsed");
     }
 
     [UIAction("minimum-song-duration-changed")]

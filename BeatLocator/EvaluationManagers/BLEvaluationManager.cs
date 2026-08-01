@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using BeatLocator.WebUtils;
 using UnityEngine;
@@ -117,15 +118,18 @@ public static class BLEvaluationManager
         public double Slope { get; }
     }
 
-    internal static async Task EvaluateScoresAsync(PluginConfig config)
+    internal static async Task EvaluateScoresAsync(
+        PluginConfig config,
+        CancellationToken cancellationToken = default)
     {
         if (profileScores != null && PlayerDifficultyRange.HasValue) return;
         
-        var tmpScores = await BLWebUtil.FetchCurrentUserScoresAsync(ProfilePlayNumber);
+        var tmpScores = await BLWebUtil.FetchCurrentUserScoresAsync(
+            ProfilePlayNumber,
+            cancellationToken);
 
         if (tmpScores == null)
         {
-            Plugin.Log.Error("Failed to get userScores. See above for errors.");
             return;
         }
 
@@ -411,11 +415,12 @@ public static class BLEvaluationManager
     }
 
     internal static async Task FindMapsAsync(bool played, float starBuffer, bool onlyTwoSaber,
-                                           int mapBalance, int mapDifficulty, int count, PluginConfig? config)
+                                           int mapBalance, int mapDifficulty, int count, PluginConfig? config,
+                                           CancellationToken cancellationToken = default)
     {
         if (config == null)
         {
-            Plugin.Log.Error("Config is null. How.");
+            Plugin.Log.Error("Could not find maps because the BeatLocator configuration is unavailable.");
             return;
         }
         
@@ -423,13 +428,11 @@ public static class BLEvaluationManager
 
         if (!PlayerDifficultyRange.HasValue)
         {
-            await EvaluateScoresAsync(config);
+            await EvaluateScoresAsync(config, cancellationToken);
         }
 
         if (!PlayerDifficultyRange.HasValue)
         {
-            Plugin.Log.Error(
-                "Failed to find maps because the runtime player profile is not available.");
             return;
         }
 
@@ -440,7 +443,7 @@ public static class BLEvaluationManager
         }
         catch (ArgumentOutOfRangeException exception)
         {
-            Plugin.Log.Error(exception.Message);
+            Plugin.Log.Error($"Could not select the requested player difficulty preset: {exception}");
             return;
         }
 
@@ -453,6 +456,7 @@ public static class BLEvaluationManager
 
         while (true)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var tmpMaps = await BLWebUtil.FindMapAsync(
                 expectedStars,
                 played,
@@ -461,30 +465,20 @@ public static class BLEvaluationManager
                 mapBalance,
                 mapDifficulty,
                 count,
-                config);
+                config,
+                cancellationToken);
 
             if (tmpMaps == null)
             {
-                Plugin.Log.Error("Failed to get maps. See above for errors.");
                 return;
             }
 
             Maps = ExcludeSessionHistory(tmpMaps);
-            var excludedMapCount = tmpMaps.Count - Maps.Count;
-            if (excludedMapCount > 0)
-            {
-                Plugin.Log.Info(
-                    $"Excluded {excludedMapCount} maps already shown during this session.");
-            }
-
             EvaluatedDifficulties = EvaluateMapDifficulties(
                 Maps,
                 mapBalance,
                 expectedStars,
                 config);
-            Plugin.Log.Info(
-                $"Evaluated {EvaluatedDifficulties.Count} map difficulties " +
-                $"with a {currentStarBuffer:0.0} star buffer.");
 
             SelectedDifficulty = SelectRandomDifficulty(EvaluatedDifficulties);
             if (SelectedDifficulty != null) break;
@@ -500,10 +494,6 @@ public static class BLEvaluationManager
             var nextStarBuffer = Math.Min(
                 currentStarBuffer + StarBufferStep,
                 maximumUsefulBuffer);
-            Plugin.Log.Warn(
-                "No maps with a positive score were found. " +
-                $"Increasing the star buffer from {currentStarBuffer:0.0} " +
-                $"to {nextStarBuffer:0.0}.");
             currentStarBuffer = nextStarBuffer;
         }
 
@@ -552,10 +542,6 @@ public static class BLEvaluationManager
         {
             SessionSongHistoryKeys.Add(key);
         }
-
-        Plugin.Log.Info(
-            $"Added {map.Name ?? "<unnamed map>"} to the session song history " +
-            $"({SessionSongHistoryEntries.Count} total).");
     }
 
     private static IEnumerable<string> GetSessionHistoryKeys(BLWebUtil.MapEntry map)
@@ -672,7 +658,6 @@ public static class BLEvaluationManager
         
         if (difficulty.PassRating == null || difficulty.TechRating == null || difficulty.Stars == null) 
         {
-            Plugin.Log.Error("Not rated difficulty got into the score evaluation method. This shouldn't be happening");
             return 0f;
         }
         
@@ -779,7 +764,7 @@ public static class BLEvaluationManager
             durationPoints = Mathf.Max(0f, 1f - (distance ?? 15f) / 15f);
         }
         
-        return 0.4f * stylePoints + 0.3f * difficultyPoints + 0.3f * durationPoints;
+        return 0.5f * stylePoints + 0.4f * difficultyPoints + 0.1f * durationPoints;
 
     }
 }

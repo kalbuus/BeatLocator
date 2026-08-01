@@ -1,5 +1,7 @@
 # BeatLocator
 
+[![Build](https://github.com/kalbuus/BeatLocator/actions/workflows/build.yml/badge.svg)](https://github.com/kalbuus/BeatLocator/actions/workflows/build.yml)
+
 BeatLocator is a recommendation engine for Beat Saber, that finds songs based on your BeatLeader profile (ScoreSaber and BeatSaver integrations coming soon). 
 
 Be mindful that this is still an alpha version, so interface bugs and crashes might be present. If you find a bug in the latest version of this mod, please report it using [GitHub Issues](https://github.com/kalbuus/BeatLocator/issues).
@@ -62,9 +64,11 @@ If you want to contibute to the mod, you have to build it on your machine. If yo
 - Matching mod dependencies described in [build/profiles.md](build/profiles.md).
 
 Third-party mod and game assemblies are not committed to this repository. Place
-the required mod files in the matching directory under `dependencies/`. When a
-local Beat Saber directory is not provided, the build script downloads stripped
-game references into the ignored `artifacts/game-references/` directory.
+the required mod files in the matching directory under `dependencies/`, or run
+the verified dependency downloader described in
+[build/profiles.md](build/profiles.md). When a local Beat Saber directory is not
+provided, the build script downloads stripped game references into the ignored
+`artifacts/game-references/` directory.
 
 To build for a single supported game version:
 

@@ -46,6 +46,16 @@ directory. BeatLeader and BetterSongSearch remain there for API validation and
 runtime installation; the current source resolves both dynamically through
 BSIPA reflection.
 
+The build-only dependencies can be downloaded from BeatMods with pinned
+SHA-256 checksums instead of committing their binaries:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\get-mod-dependencies.ps1 -Profile 1.39.1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\get-mod-dependencies.ps1 -Profile 1.40.2-1.40.8
+```
+
+GitHub Actions runs these downloads automatically before building both profiles.
+
 ## Adding a future profile
 
 When a future Beat Saber version gains a usable dependency set, add
