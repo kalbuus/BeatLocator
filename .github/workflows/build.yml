@@ -32,11 +32,11 @@ jobs:
           - target: 1.39.1
             dependency-profile: 1.39.1
             artifact-name: BeatLocator-1.39.1
-            artifact-path: BeatLocator/bin/Release/1.39.1/net472/zip/*.zip
+            package-source: BeatLocator/bin/Release/1.39.1/net472/Artifact
           - target: 1.40.2-1.40.8
             dependency-profile: 1.40.2-1.40.8
             artifact-name: BeatLocator-1.40.2-1.40.8
-            artifact-path: BeatLocator/bin/Release/1.40.2-1.40.8/BeatLocator-1.40.2-1.40.8.zip
+            package-source: BeatLocator/bin/Release/1.40.2-1.40.8/Artifact
 
     steps:
       - name: Check out repository
@@ -65,6 +65,7 @@ jobs:
           -GameVersion 1.39.1
           -Configuration Release
           -NoRestore
+          -DisableZipRelease
 
       - name: Build Beat Saber 1.40.2-1.40.8
         if: matrix.target == '1.40.2-1.40.8'
@@ -74,10 +75,34 @@ jobs:
           -Configuration Release
           -NoRestore
 
+      - name: Package build artifact
+        shell: powershell
+        run: |
+          $sourceDirectory = Resolve-Path -LiteralPath '${{ matrix.package-source }}'
+          $packageDirectory = New-Item -ItemType Directory -Path '.\artifacts\ci' -Force
+          $packagePath = Join-Path $packageDirectory '${{ matrix.artifact-name }}.zip'
+          $pluginPath = Join-Path $sourceDirectory 'Plugins\BeatLocator.dll'
+
+          if (-not (Test-Path -LiteralPath $pluginPath -PathType Leaf)) {
+            throw "Built plugin was not found: $pluginPath"
+          }
+
+          Compress-Archive `
+            -Path (Join-Path $sourceDirectory 'Plugins') `
+            -DestinationPath $packagePath `
+            -CompressionLevel Optimal `
+            -Force
+
+          if (-not (Test-Path -LiteralPath $packagePath -PathType Leaf)) {
+            throw "Build package was not created: $packagePath"
+          }
+
+          Get-FileHash -LiteralPath $packagePath -Algorithm SHA256
+
       - name: Upload build artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.artifact-name }}
-          path: ${{ matrix.artifact-path }}
+          path: artifacts/ci/${{ matrix.artifact-name }}.zip
           if-no-files-found: error
           retention-days: 14
