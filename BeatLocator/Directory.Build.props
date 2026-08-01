@@ -30,11 +30,11 @@
     <PluginId>BeatLocator</PluginId>
     <PluginName>BeatLocator</PluginName>
     <Authors>kalbuus</Authors>
-    <Version>0.0.1</Version>
+    <Version>0.0.2</Version>
     <GameVersion>$(BeatSaberVersion)</GameVersion>
     <Description>Mod for finding what maps to play</Description>
     <!--<PluginIcon></PluginIcon>-->
-    <!--<ProjectSource></ProjectSource>-->
+    <ProjectSource>https://github.com/kalbuus/BeatLocator</ProjectSource>
     <!--<ProjectHome></ProjectHome>-->
     <!--<DonateUrl></DonateUrl>-->
   </PropertyGroup>
