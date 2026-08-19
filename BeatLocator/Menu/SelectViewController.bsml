@@ -1,7 +1,10 @@
 <vertical id="menu-root" child-control-height="false" child-expand-height="false" child-expand-width="false" child-align="UpperCenter" spacing="3">
     
-    <horizontal bg="panel-top" pad-left="15" pad-right="15" horizontal-fit="PreferredSize" vertical-fit="PreferredSize">
-        <text text="BeatLocator" align="Center" font-size="8"/>
+    <horizontal bg="panel-top" pad-left="7" pad-right="7" pad-top="3" pad-bottom="3" horizontal-fit="PreferredSize" vertical-fit="PreferredSize">
+        <image src="BeatLocator.Assets.logo.png" 
+               pref-width="45.2" 
+               pref-height="5" 
+               preserve-aspect="true" />
     </horizontal>
     
     <button id="exit-button"

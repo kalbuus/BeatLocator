@@ -1,10 +1,21 @@
-# BeatLocator
+<p align="center">
+  <img src="docs/images/logo.png" alt="BeatLocator Logo" width="600">
+</p>
 
-[![Build](https://github.com/kalbuus/BeatLocator/actions/workflows/build.yml/badge.svg)](https://github.com/kalbuus/BeatLocator/actions/workflows/build.yml)
+<p align="center">
+  <a href="https://github.com/kalbuus/BeatLocator/actions/workflows/build.yml">
+    <img src="https://github.com/kalbuus/BeatLocator/actions/workflows/build.yml/badge.svg" alt="Build">
+  </a>
+</p>
 
-BeatLocator is a recommendation engine for Beat Saber, that finds songs based on your BeatLeader profile (ScoreSaber and BeatSaver integrations coming soon). 
-
-Be mindful that this is still an alpha version, so interface bugs and crashes might be present. If you find a bug in the latest version of this mod, please report it using [GitHub Issues](https://github.com/kalbuus/BeatLocator/issues).
+<p align="center">
+  BeatLocator is a recommendation engine for Beat Saber that finds songs based on your BeatLeader profile (ScoreSaber and BeatSaver integrations coming soon).
+</p>
+<p align="center">
+  <small>
+    Be mindful that this is still an alpha version, so interface bugs and crashes might be present. If you find a bug in the latest version of this mod, please report it using [GitHub Issues](https://github.com/kalbuus/BeatLocator/issues).
+  </small>
+</p>
 
 ## Screenshots
 

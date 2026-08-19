@@ -46,6 +46,9 @@
         <EmbeddedResource Include="Assets\roulette_hit.wav" />
         <None Remove="Assets\roulette_stop.wav" />
         <EmbeddedResource Include="Assets\roulette_stop.wav" />
+        <None Remove="Assets\beatlocator_logo_white.png" />
+        <None Remove="Assets\logo.png" />
+        <EmbeddedResource Include="Assets\logo.png" />
     </ItemGroup>
 
     <ItemGroup>
