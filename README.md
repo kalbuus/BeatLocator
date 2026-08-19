@@ -11,17 +11,18 @@
 <p align="center">
   BeatLocator is a recommendation engine for Beat Saber that finds songs based on your BeatLeader profile (ScoreSaber and BeatSaver integrations coming soon).
 </p>
-<p align="center">
-  <small>
-    Be mindful that this is still an alpha version, so interface bugs and crashes might be present. If you find a bug in the latest version of this mod, please report it using [GitHub Issues](https://github.com/kalbuus/BeatLocator/issues).
-  </small>
-</p>
+
+---
+
+Be mindful that this is still an alpha version, so interface bugs and crashes might be present. 
+If you find a bug in the latest version of this mod, please report it using [GitHub Issues](https://github.com/kalbuus/BeatLocator/issues)
+
 
 ## Screenshots
-
-![BeatLocator search settings](docs/images/beatlocator-settings.png)
-
-![BeatLocator selected map](docs/images/beatlocator-result.png)
+<p align="center">
+  <img src="docs/images/beatlocator-settings.png" alt="BeatLocator search settings" width="600">
+  <img src="docs/images/beatlocator-result.png" alt="BeatLocator selected map" width="800">
+</p>
 
 ## Mod Capabilities
 
