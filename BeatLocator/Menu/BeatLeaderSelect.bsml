@@ -1,10 +1,34 @@
-﻿<vertical child-control-height="false" child-expand-height="false" child-expand-width="false" child-align="UpperCenter" spacing="3">
+﻿<vertical child-control-height="false" child-expand-height="false" child-expand-width="false" child-align="UpperCenter" spacing="3.5">
     
-    <horizontal bg="panel-top" pad-left="7" pad-right="7" pad-top="3" pad-bottom="3" horizontal-fit="PreferredSize" vertical-fit="PreferredSize">
-        <image src="BeatLocator.Assets.logo.png" 
-               pref-width="45.2" 
-               pref-height="5" 
+    <horizontal horizontal-fit="PreferredSize"
+                vertical-fit="PreferredSize"
+                child-control-width="false"
+                child-control-height="false"
+                child-expand-width="false"
+                child-expand-height="false"
+                child-align="MiddleCenter">
+        <image id="beatleader-provider-logo"
+               src="BeatLocator.Assets.bl_logo.png"
+               ignore-layout="true"
+               anchor-min="0.5 0.5"
+               anchor-max="0.5 0.5"
+               anchored-position="-35.5 0"
+               size-delta="5.33 5.33"
                preserve-aspect="true" />
+        <image id="scoresaber-provider-logo"
+               src="BeatLocator.Assets.ss_logo.png"
+               ignore-layout="true"
+               anchor-min="0.5 0.5"
+               anchor-max="0.5 0.5"
+               anchored-position="-35.5 0"
+               size-delta="5.33 5.33"
+               preserve-aspect="true" />
+        <horizontal bg="panel-top" pad-left="7" pad-right="7" pad-top="3" pad-bottom="3" horizontal-fit="PreferredSize" vertical-fit="PreferredSize">
+            <image src="BeatLocator.Assets.logo.png"
+                   pref-width="45.2"
+                   pref-height="5"
+                   preserve-aspect="true" />
+        </horizontal>
     </horizontal>
     
     <button id="exit-button"
@@ -41,7 +65,8 @@
     </horizontal>
     
     <!-- Song Balance -->
-    <horizontal pad="2"
+    <horizontal id="balance-row"
+                pad="2"
                 preferred-width="100" 
                 preferred-height="11" 
                 child-control-width="true" 
@@ -54,13 +79,13 @@
     </horizontal>
     
     <horizontal preferred-width="100"
-                preferred-height="7"
+                preferred-height="12"
                 child-control-width="false"
                 child-control-height="false"
                 child-expand-width="false"
                 child-expand-height="false"
                 child-align="MiddleCenter"
-                spacing="1.5">
+                spacing="2">
         <button id="played-toggle-button"
                 text=""
                 stroke-visible="false"

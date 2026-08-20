@@ -180,7 +180,7 @@ internal static class BeatSaberLevelLauncher
         if (!TryParseDifficulty(selectedDifficulty.DifficultyName, out var targetDifficulty))
         {
             throw new InvalidOperationException(
-                $"Unknown BeatLeader difficulty: {selectedDifficulty.DifficultyName ?? "<null>"}.");
+                $"Unknown ranked-map difficulty: {selectedDifficulty.DifficultyName ?? "<null>"}.");
         }
 
         var keys = level.GetBeatmapKeys();
@@ -238,8 +238,8 @@ internal static class BeatSaberLevelLauncher
         var normalized = NormalizeToken(modeName);
 
         if (normalized.Contains("standard")) return "standard";
-        if (normalized.StartsWith("360") || normalized.Contains("threesixty")) return "360";
-        if (normalized.StartsWith("90") || normalized.Contains("ninety")) return "90";
+        if (normalized.Contains("360") || normalized.Contains("threesixty")) return "360";
+        if (normalized.Contains("90") || normalized.Contains("ninety")) return "90";
         if (normalized.Contains("onesaber")) return "onesaber";
         if (normalized.Contains("noarrows")) return "noarrows";
         if (normalized.Contains("lawless")) return "lawless";

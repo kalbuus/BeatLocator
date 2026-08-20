@@ -2,6 +2,7 @@ using BeatLocator.EvaluationManagers;
 using BeatLocator.Integrations;
 using HMUI;
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -28,30 +29,39 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     private MainFlowCoordinator _mainFlowCoordinator = null!;
     private SoloFreePlayFlowCoordinator _soloFreePlayFlowCoordinator = null!;
+    private IPlatformUserModel _platformUserModel = null!;
     private SelectViewController _selectViewController = null!;
     private BeatLeaderSelect _beatLeaderSelect = null!;
     private RouletteAnimationViewController _rouletteAnimationViewController = null!;
+    private SimpleDialogPromptViewController _popupViewController = null!;
+    private readonly Queue<PopupRequest> _popupQueue = new Queue<PopupRequest>();
+    private bool _popupPresented;
     private bool _mapSearchInProgress;
     private CancellationTokenSource? _mapSearchCancellationSource;
     private bool _mapDownloadInProgress;
     private object? _fadeInOutController;
     private bool _launchFadeActive;
+    private RankingProvider _rankingProvider = RankingProvider.BeatLeader;
     private PluginConfig? _config;
 
     [Inject]
     private void Construct(
         MainFlowCoordinator mainFlowCoordinator,
         SoloFreePlayFlowCoordinator soloFreePlayFlowCoordinator,
+        IPlatformUserModel platformUserModel,
         SelectViewController selectViewController,
         BeatLeaderSelect beatLeaderSelect,
         RouletteAnimationViewController rouletteAnimationViewController,
+        SimpleDialogPromptViewController popupViewController,
         PluginConfig config)
     {
         _mainFlowCoordinator = mainFlowCoordinator;
         _soloFreePlayFlowCoordinator = soloFreePlayFlowCoordinator;
+        _platformUserModel = platformUserModel;
         _selectViewController = selectViewController;
         _beatLeaderSelect = beatLeaderSelect;
         _rouletteAnimationViewController = rouletteAnimationViewController;
+        _popupViewController = popupViewController;
         _config = config;
 
         _fadeInOutController = typeof(MainFlowCoordinator).GetField(
@@ -77,6 +87,23 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     internal void ShowBeatLeaderSelect()
     {
+        ShowRankingSelect(RankingProvider.BeatLeader);
+    }
+
+    internal void ShowScoreSaberSelect()
+    {
+        ShowRankingSelect(RankingProvider.ScoreSaber);
+    }
+
+    internal void ShowRankingSelect()
+    {
+        ShowRankingSelect(_rankingProvider);
+    }
+
+    private void ShowRankingSelect(RankingProvider provider)
+    {
+        _rankingProvider = provider;
+        _beatLeaderSelect.ConfigureProvider(provider);
         ReplaceTopViewController(
             _beatLeaderSelect,
             null,
@@ -104,16 +131,23 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
             ViewController.AnimationDirection.Horizontal);
     }
 
-    internal async void FindMapAsync(bool played, float starBuffer, bool onlyTwoSaber,
-                                    bool secretDifficulty, int mapBalance,
-                                    int mapDifficulty, int count)
+    internal async void FindMapAsync(
+        RankingProvider provider,
+        bool played,
+        float starBuffer,
+        bool onlyTwoSaber,
+        bool secretDifficulty,
+        int mapBalance,
+        int mapDifficulty,
+        int count)
     {
         if (_mapSearchInProgress)
         {
-            Plugin.Log.Warn("A BeatLeader map search is already in progress.");
+            Plugin.Log.Warn($"A {provider.GetDisplayName()} map search is already in progress.");
             return;
         }
 
+        _rankingProvider = provider;
         _mapSearchInProgress = true;
         var cancellationSource = new CancellationTokenSource();
         _mapSearchCancellationSource = cancellationSource;
@@ -127,7 +161,9 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 cancellationSource.Token,
                 timeoutSource.Token);
 
-            await BLEvaluationManager.FindMapsAsync(
+            var searchResult = await BLEvaluationManager.FindMapsAsync(
+                provider,
+                _platformUserModel,
                 played,
                 starBuffer,
                 onlyTwoSaber,
@@ -137,14 +173,16 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 _config,
                 linkedSource.Token);
 
-            var selectedDifficulty = BLEvaluationManager.SelectedDifficulty;
-            if (selectedDifficulty == null)
+            if (!searchResult.IsSuccess || searchResult.SelectedDifficulty == null)
             {
+                ShowPopup(
+                    "SONG NOT FOUND",
+                    searchResult.FailureReason ?? "No suitable song was found.");
                 return;
             }
 
             _rouletteAnimationViewController.SetResult(
-                selectedDifficulty,
+                searchResult.SelectedDifficulty,
                 secretDifficulty);
             showRoulette = true;
         }
@@ -153,11 +191,18 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         }
         catch (OperationCanceledException)
         {
-            Plugin.Log.Error("BeatLeader map search timed out after 45 seconds.");
+            var serviceName = provider.GetDisplayName();
+            Plugin.Log.Error($"{serviceName} map search timed out after 45 seconds.");
+            ShowPopup(
+                "SEARCH TIMED OUT",
+                $"{serviceName} did not respond within 45 seconds. Check your connection and try again.");
         }
         catch (Exception exception)
         {
             Plugin.Log.Error($"Unexpected error while finding maps: {exception}");
+            ShowPopup(
+                "SONG SEARCH FAILED",
+                $"The search stopped because of an unexpected error: {exception.Message}");
         }
         finally
         {
@@ -182,6 +227,50 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     private void CancelMapSearch()
     {
         _mapSearchCancellationSource?.Cancel();
+    }
+
+    internal void ShowPopup(
+        string title,
+        string message,
+        string buttonText = "OK")
+    {
+        _popupQueue.Enqueue(new PopupRequest(title, message, buttonText));
+        PresentNextPopup();
+    }
+
+    private void PresentNextPopup()
+    {
+        if (_popupPresented || _popupQueue.Count == 0) return;
+
+        var popup = _popupQueue.Dequeue();
+        _popupPresented = true;
+        _popupViewController.Init(
+            popup.Title,
+            popup.Message,
+            popup.ButtonText,
+            _ => DismissViewController(
+                _popupViewController,
+                ViewController.AnimationDirection.Vertical,
+                () =>
+                {
+                    _popupPresented = false;
+                    PresentNextPopup();
+                }));
+        PresentViewController(_popupViewController);
+    }
+
+    private readonly struct PopupRequest
+    {
+        internal PopupRequest(string title, string message, string buttonText)
+        {
+            Title = title;
+            Message = message;
+            ButtonText = buttonText;
+        }
+
+        internal string Title { get; }
+        internal string Message { get; }
+        internal string ButtonText { get; }
     }
 
     internal async Task<MapDownloadOutcome> DownloadMapAsync(EvaluatedDifficulty selectedDifficulty)
@@ -383,7 +472,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         {
             if (!_mapDownloadInProgress)
             {
-                ShowBeatLeaderSelect();
+                ShowRankingSelect();
             }
             return;
         }

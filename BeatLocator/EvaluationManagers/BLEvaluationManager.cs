@@ -20,7 +20,10 @@ public static class BLEvaluationManager
     private static readonly HashSet<string> SessionSongHistoryKeys =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-    private static List<BLWebUtil.ScoreEntry>? profileScores;
+    private static readonly Dictionary<RankingProvider, List<BLWebUtil.ScoreEntry>> ProfileScores =
+        new Dictionary<RankingProvider, List<BLWebUtil.ScoreEntry>>();
+    private static readonly Dictionary<RankingProvider, DifficultyRange> PlayerDifficultyRanges =
+        new Dictionary<RankingProvider, DifficultyRange>();
 
     public static DifficultyRange? PlayerDifficultyRange;
     public static List<BLWebUtil.MapEntry>? Maps;
@@ -118,19 +121,33 @@ public static class BLEvaluationManager
         public double Slope { get; }
     }
 
-    internal static async Task EvaluateScoresAsync(
+    private static async Task<string?> EvaluateScoresAsync(
+        RankingProvider provider,
+        IPlatformUserModel platformUserModel,
         PluginConfig config,
         CancellationToken cancellationToken = default)
     {
-        if (profileScores != null && PlayerDifficultyRange.HasValue) return;
-        
-        var tmpScores = await BLWebUtil.FetchCurrentUserScoresAsync(
-            ProfilePlayNumber,
-            cancellationToken);
+        if (ProfileScores.ContainsKey(provider) &&
+            PlayerDifficultyRanges.ContainsKey(provider))
+        {
+            PlayerDifficultyRange = PlayerDifficultyRanges[provider];
+            return null;
+        }
+
+        var tmpScores = provider == RankingProvider.ScoreSaber
+            ? await SSWebUtil.FetchCurrentUserScoresAsync(
+                platformUserModel,
+                ProfilePlayNumber,
+                cancellationToken)
+            : await BLWebUtil.FetchCurrentUserScoresAsync(
+                ProfilePlayNumber,
+                cancellationToken);
 
         if (tmpScores == null)
         {
-            return;
+            var serviceName = provider.GetDisplayName();
+            return $"Could not load your {serviceName} score history. " +
+                   $"Make sure {serviceName} is signed in and the service is reachable.";
         }
 
         DifficultyRange difficultyRange;
@@ -143,11 +160,12 @@ public static class BLEvaluationManager
             exception is InvalidOperationException)
         {
             Plugin.Log.Error($"Could not calculate the player difficulty range: {exception.Message}");
-            return;
+            return $"Could not calculate your recommended difficulty: {exception.Message}";
         }
 
-        profileScores = tmpScores;
-        SetPlayerDifficultyRange(difficultyRange, "Calculated");
+        ProfileScores[provider] = tmpScores;
+        SetPlayerDifficultyRange(provider, difficultyRange, "Calculated");
+        return null;
     }
 
     /// <summary>
@@ -156,32 +174,36 @@ public static class BLEvaluationManager
     /// </summary>
     internal static void RecalculatePlayerDifficultyRange(PluginConfig config)
     {
-        if (profileScores == null) return;
-
-        try
+        foreach (var cachedScores in ProfileScores.ToArray())
         {
-            var difficultyRange = CalculateCenteredDifficultyRange(
-                CreatePlaySamples(profileScores),
-                config.isEndMePossible);
-            SetPlayerDifficultyRange(difficultyRange, "Recalculated");
-        }
-        catch (Exception exception) when (
-            exception is ArgumentException ||
-            exception is InvalidOperationException)
-        {
-            Plugin.Log.Error(
-                $"Could not recalculate the player difficulty range: {exception.Message}");
+            try
+            {
+                var difficultyRange = CalculateCenteredDifficultyRange(
+                    CreatePlaySamples(cachedScores.Value),
+                    config.isEndMePossible);
+                SetPlayerDifficultyRange(cachedScores.Key, difficultyRange, "Recalculated");
+            }
+            catch (Exception exception) when (
+                exception is ArgumentException ||
+                exception is InvalidOperationException)
+            {
+                Plugin.Log.Error(
+                    $"Could not recalculate the {cachedScores.Key.GetDisplayName()} " +
+                    $"player difficulty range: {exception.Message}");
+            }
         }
     }
 
     private static void SetPlayerDifficultyRange(
+        RankingProvider provider,
         DifficultyRange difficultyRange,
         string operation)
     {
+        PlayerDifficultyRanges[provider] = difficultyRange;
         PlayerDifficultyRange = difficultyRange;
 
         Plugin.Log.Info(
-            $"{operation} difficulty stars: " +
+            $"{operation} {provider.GetDisplayName()} difficulty stars: " +
             $"{difficultyRange.Minimum:0.00}, " +
             $"{difficultyRange.Low:0.00}, " +
             $"{difficultyRange.Medium:0.00}, " +
@@ -256,6 +278,7 @@ public static class BLEvaluationManager
             model.Slope * centerStars;
 
         const float innerLogitOffset = 0.35f;
+        const float highLogitOffset = 0.25f;
         const float outerLogitOffset = 0.75f;
 
         float minimum = GetBoundedStarsForLogit(
@@ -272,7 +295,7 @@ public static class BLEvaluationManager
 
         float high = GetBoundedStarsForLogit(
             model,
-            centerLogit - innerLogitOffset,
+            centerLogit - highLogitOffset,
             centerStars,
             maximumDistance: 1.75f);
         
@@ -414,37 +437,59 @@ public static class BLEvaluationManager
             slope);
     }
 
-    internal static async Task FindMapsAsync(bool played, float starBuffer, bool onlyTwoSaber,
-                                           int mapBalance, int mapDifficulty, int count, PluginConfig? config,
-                                           CancellationToken cancellationToken = default)
+    internal static async Task<MapSearchResult> FindMapsAsync(
+        RankingProvider provider,
+        IPlatformUserModel platformUserModel,
+        bool played,
+        float starBuffer,
+        bool onlyTwoSaber,
+        int mapBalance,
+        int mapDifficulty,
+        int count,
+        PluginConfig? config,
+        CancellationToken cancellationToken = default)
     {
         if (config == null)
         {
             Plugin.Log.Error("Could not find maps because the BeatLocator configuration is unavailable.");
-            return;
+            return MapSearchResult.Failure("BeatLocator configuration is unavailable.");
         }
         
         SelectedDifficulty = null;
 
-        if (!PlayerDifficultyRange.HasValue)
+        if (!PlayerDifficultyRanges.TryGetValue(provider, out var playerDifficultyRange))
         {
-            await EvaluateScoresAsync(config, cancellationToken);
+            var evaluationFailure = await EvaluateScoresAsync(
+                provider,
+                platformUserModel,
+                config,
+                cancellationToken);
+            if (evaluationFailure != null)
+            {
+                return MapSearchResult.Failure(evaluationFailure);
+            }
+
+            PlayerDifficultyRanges.TryGetValue(provider, out playerDifficultyRange);
         }
 
-        if (!PlayerDifficultyRange.HasValue)
+        if (!PlayerDifficultyRanges.ContainsKey(provider))
         {
-            return;
+            return MapSearchResult.Failure(
+                "Your recommended difficulty could not be calculated from the available scores.");
         }
+
+        PlayerDifficultyRange = playerDifficultyRange;
 
         float expectedStars;
         try
         {
-            expectedStars = PlayerDifficultyRange.Value.GetStars(mapDifficulty);
+            expectedStars = playerDifficultyRange.GetStars(mapDifficulty);
         }
         catch (ArgumentOutOfRangeException exception)
         {
             Plugin.Log.Error($"Could not select the requested player difficulty preset: {exception}");
-            return;
+            return MapSearchResult.Failure(
+                "The selected difficulty preset is invalid. Please choose another difficulty.");
         }
 
         var maximumUsefulBuffer = Math.Max(
@@ -457,27 +502,46 @@ public static class BLEvaluationManager
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var tmpMaps = await BLWebUtil.FindMapAsync(
-                expectedStars,
-                played,
-                currentStarBuffer,
-                onlyTwoSaber,
-                mapBalance,
-                mapDifficulty,
-                count,
-                config,
-                cancellationToken);
+            var tmpMaps = provider == RankingProvider.ScoreSaber
+                ? await SSWebUtil.FindMapAsync(
+                    expectedStars,
+                    currentStarBuffer,
+                    onlyTwoSaber,
+                    mapDifficulty,
+                    count,
+                    cancellationToken)
+                : await BLWebUtil.FindMapAsync(
+                    expectedStars,
+                    played,
+                    currentStarBuffer,
+                    onlyTwoSaber,
+                    mapBalance,
+                    mapDifficulty,
+                    count,
+                    config,
+                    cancellationToken);
 
             if (tmpMaps == null)
             {
-                return;
+                var serviceName = provider.GetDisplayName();
+                return MapSearchResult.Failure(
+                    $"{serviceName} could not complete the map request. " +
+                    "Check your sign-in and internet connection, then try again.");
             }
 
             Maps = ExcludeSessionHistory(tmpMaps);
+            if (tmpMaps.Count > 0 && Maps.Count == 0)
+            {
+                return MapSearchResult.Failure(
+                    "All matching maps have already been shown during this Beat Saber session. " +
+                    "Restart the game or change the filters.");
+            }
+
             EvaluatedDifficulties = EvaluateMapDifficulties(
                 Maps,
                 mapBalance,
                 expectedStars,
+                provider,
                 config);
 
             SelectedDifficulty = SelectRandomDifficulty(EvaluatedDifficulties);
@@ -488,7 +552,12 @@ public static class BLEvaluationManager
                 Plugin.Log.Warn(
                     "No difficulty with a positive score was found after searching " +
                     $"the full {MinimumTargetStars:0.#}-{MaximumTargetStars:0.#} star range.");
-                return;
+                var filters = provider == RankingProvider.ScoreSaber
+                    ? "difficulty or duration settings"
+                    : "difficulty, balance, duration, or played-map settings";
+                return MapSearchResult.Failure(
+                    "No ranked maps matched your profile and current filters. " +
+                    $"Try changing the {filters}.");
             }
 
             var nextStarBuffer = Math.Min(
@@ -505,6 +574,8 @@ public static class BLEvaluationManager
             $"{selectedDifficulty.DifficultyName ?? "<unnamed difficulty>"} " +
             $"({selectedDifficulty.ModeName ?? "<unknown mode>"}), " +
             $"{selectedDifficulty.Stars:0.00} stars, score: {SelectedDifficulty.Score:0.000}.");
+
+        return MapSearchResult.Success(SelectedDifficulty);
     }
 
     private static List<BLWebUtil.MapEntry> ExcludeSessionHistory(
@@ -621,6 +692,7 @@ public static class BLEvaluationManager
         IEnumerable<BLWebUtil.MapEntry> maps,
         int mapBalance,
         float expectedStars,
+        RankingProvider provider,
         PluginConfig config)
     {
         var evaluatedDifficulties = new List<EvaluatedDifficulty>();
@@ -636,6 +708,7 @@ public static class BLEvaluationManager
                     difficulty,
                     mapBalance,
                     expectedStars,
+                    provider,
                     config);
 
                 evaluatedDifficulties.Add(new EvaluatedDifficulty(map, difficulty, score));
@@ -650,13 +723,41 @@ public static class BLEvaluationManager
         BLWebUtil.DifficultyEntry difficulty,
         int mapBalance,
         float expectedStars,
+        RankingProvider provider,
         PluginConfig config)
     {
         // Final rating:
         // 0 - Song is not included in the final selection
         // 1 - Song has the biggest chance of being selected
         
-        if (difficulty.PassRating == null || difficulty.TechRating == null || difficulty.Stars == null) 
+        if (difficulty.Stars == null)
+        {
+            return 0f;
+        }
+
+        float difficultyDiff = Mathf.Abs((difficulty.Stars.Value - expectedStars) /
+                                         (difficulty.Stars.Value + expectedStars));
+
+        var difficultyPoints = difficultyDiff switch
+        {
+            <= 1.5f => 1 - difficultyDiff / 1.5f,
+            _ => 0f
+        };
+
+        difficultyPoints = Mathf.Clamp01(difficultyPoints);
+
+        // ScoreSaber exposes a single star rating, not separate pass/tech
+        // components. Its UI therefore hides Balance and the provider is scored
+        // only by target difficulty and the shared duration preference.
+        if (provider == RankingProvider.ScoreSaber)
+        {
+            if (!config.RecommendationsDurationEnabled) return difficultyPoints;
+
+            var scoreSaberDurationPoints = CalculateDurationPoints(map, config);
+            return 0.9f * difficultyPoints + 0.1f * scoreSaberDurationPoints;
+        }
+
+        if (difficulty.PassRating == null || difficulty.TechRating == null)
         {
             return 0f;
         }
@@ -733,22 +834,18 @@ public static class BLEvaluationManager
 
         if (stylePoints == 0f) return 0f;
 
-        float difficultyDiff = Mathf.Abs((difficulty.Stars.Value - expectedStars) /
-                                           (difficulty.Stars.Value + expectedStars));
-        
-        var difficultyPoints = difficultyDiff switch
-        {
-            <= 1.5f => 1 - difficultyDiff / 1.5f,
-            _ => 0f
-        };
-        
-        difficultyPoints = Mathf.Clamp01(difficultyPoints);
-        
-        
         if (!config.RecommendationsDurationEnabled) return 0.6f * stylePoints + 0.4f * difficultyPoints;
 
+        var durationPoints = CalculateDurationPoints(map, config);
+        return 0.5f * stylePoints + 0.4f * difficultyPoints + 0.1f * durationPoints;
+    }
+
+    private static float CalculateDurationPoints(
+        BLWebUtil.MapEntry map,
+        PluginConfig config)
+    {
         float durationPoints;
-        
+
         if (map.duration >= config.MinimumRecommendedSongDurationSeconds &&
             map.duration <= config.MaximumRecommendedSongDurationSeconds)
         {
@@ -763,8 +860,7 @@ public static class BLEvaluationManager
 
             durationPoints = Mathf.Max(0f, 1f - (distance ?? 15f) / 15f);
         }
-        
-        return 0.5f * stylePoints + 0.4f * difficultyPoints + 0.1f * durationPoints;
 
+        return durationPoints;
     }
 }

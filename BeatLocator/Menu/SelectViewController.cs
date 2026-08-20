@@ -55,8 +55,11 @@ public class SelectViewController : BSMLAutomaticViewController
     private TMP_Text _scoreSaberLabel = null!;
 
     private bool IsBeatLeaderInstalled => PluginManager.GetPluginFromId("BeatLeader") != null;
+    private bool IsScoreSaberInstalled => PluginManager.GetPluginFromId("ScoreSaber") != null;
     [UIValue("beatLeaderButtonHover")]
     public string BeatLeaderButtonHover => IsBeatLeaderInstalled ? "Play BL's Rating Maps Based On Your Skills" : "BeatLeader Mod Is Not Installed";
+    [UIValue("scoreSaberButtonHover")]
+    public string ScoreSaberButtonHover => IsScoreSaberInstalled ? "Play ScoreSaber Ranked Maps Based On Your Skills" : "ScoreSaber Mod Is Not Installed";
 
     private BeatLocatorFlowCoordinator _flowCoordinator = null!;
     private Sprite? _nineSliceSprite;
@@ -82,6 +85,7 @@ public class SelectViewController : BSMLAutomaticViewController
             _exitIconSprite);
 
         _beatLeaderButton.interactable = IsBeatLeaderInstalled;
+        _scoreSaberButton.interactable = IsScoreSaberInstalled;
 
         RemoveNativeButtonBackground(
             _beatSaverButton,
@@ -199,6 +203,18 @@ public class SelectViewController : BSMLAutomaticViewController
         }
 
         _flowCoordinator.ShowBeatLeaderSelect();
+    }
+
+    [UIAction("scPressed")]
+    private void OnScoreSaberPressed()
+    {
+        if (!IsScoreSaberInstalled)
+        {
+            Plugin.Log.Warn("ScoreSaber was selected, but the ScoreSaber plugin is not installed.");
+            return;
+        }
+
+        _flowCoordinator.ShowScoreSaberSelect();
     }
 
     [UIAction("feedbackPressed")]

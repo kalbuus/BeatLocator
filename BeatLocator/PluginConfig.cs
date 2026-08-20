@@ -24,6 +24,8 @@ internal class PluginConfig
 
     public virtual bool isEndMePossible { get; set; } = true;
 
+    // Shared search-screen values for every ranking provider. The legacy
+    // BeatLeader prefix is retained so existing config files keep their values.
     public virtual int BeatLeaderDifficultySelection { get; set; } = 0;
 
     public virtual int BeatLeaderBalanceSelection { get; set; } = 0;

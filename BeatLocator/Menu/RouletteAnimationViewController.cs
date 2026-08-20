@@ -37,6 +37,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     private const float SongDetailsHeight = 36f;
     private const float SongTitleVisualGap = 1f;
     private const float MaximumSongTitleWidth = 39f;
+    private const int CoverRequestTimeoutSeconds = 15;
     private const string RouletteHitResource = "BeatLocator.Assets.roulette_hit.wav";
     private const string RouletteStopResource = "BeatLocator.Assets.roulette_stop.wav";
 
@@ -116,7 +117,6 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     private Task<Sprite>? _coverLoadTask;
     private Coroutine? _spinCoroutine;
     private Coroutine? _revealCoroutine;
-    private bool _coverLoaded;
     private bool _spinFinished;
     private bool _secretDifficulty;
     private int _runId;
@@ -240,7 +240,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
             return;
         }
 
-        _flowCoordinator.ShowBeatLeaderSelect();
+        _flowCoordinator.ShowRankingSelect();
     }
 
     [UIAction("primaryPressed")]
@@ -538,7 +538,23 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
                               gameObject.AddComponent<AudioSource>();
         _previewAudioSource.playOnAwake = false;
         _previewAudioSource.loop = false;
-        _previewAudioSource.volume = 0.7f;
+        _previewAudioSource.volume = 1f;
+        TryUseVanillaPreviewMixer();
+    }
+
+    private bool TryUseVanillaPreviewMixer()
+    {
+        if (_previewAudioSource.outputAudioMixerGroup != null) return true;
+
+        var vanillaPreviewSource = _songPreviewPlayer
+            .GetComponentsInChildren<AudioSource>(true)
+            .FirstOrDefault(source => source.outputAudioMixerGroup != null);
+        if (vanillaPreviewSource == null) return false;
+
+        // A standalone AudioSource bypasses Beat Saber's MusicVolume mixer and can
+        // therefore play at full volume even when vanilla song previews are quiet.
+        _previewAudioSource.outputAudioMixerGroup = vanillaPreviewSource.outputAudioMixerGroup;
+        return true;
     }
 
     private void PrepareRouletteAudio()
@@ -701,7 +717,6 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         StopPreviewPlayback();
 
         var runId = ++_runId;
-        _coverLoaded = _loadedCoverSprite != null;
         _spinFinished = false;
         _winnerCover.color = Color.white;
         _winnerCover.sprite = _loadedCoverSprite ?? _roundedCardSprite;
@@ -712,13 +727,9 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         ResetCoverScales();
 
         SetStatus($"Selecting {SongTitleText}...");
-        if (!_coverLoaded && !string.IsNullOrWhiteSpace(_coverUrl))
+        if (_loadedCoverSprite == null && !string.IsNullOrWhiteSpace(_coverUrl))
         {
             _ = LoadCoverAsync(runId);
-        }
-        else if (!_coverLoaded)
-        {
-            _coverLoaded = true;
         }
         _spinCoroutine = StartCoroutine(AnimateRoulette(runId));
     }
@@ -728,17 +739,16 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         try
         {
             var coverSprite = _loadedCoverSprite ??
-                              await (_coverLoadTask ??= DownloadCoverSpriteAsync());
+                              await (_coverLoadTask ??= DownloadCoverSpriteAsync(runId));
 
             if (runId != _runId) return;
 
             _loadedCoverSprite = coverSprite;
             _coverLoadTask = null;
             _winnerCover.sprite = coverSprite;
-            _coverLoaded = true;
             if (_spinFinished)
             {
-                RevealWinner();
+                ApplyLoadedCover(coverSprite);
             }
         }
         catch (Exception exception)
@@ -748,43 +758,49 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
 
             Plugin.Log.Error($"Could not load the roulette cover: {exception}");
             _winnerCover.sprite = _roundedCardSprite;
-            _coverLoaded = true;
-            if (_spinFinished)
-            {
-                RevealWinner();
-            }
+            _flowCoordinator.ShowPopup(
+                "COVER NOT AVAILABLE",
+                "The song cover could not be loaded, so a placeholder will be used.\n\n" +
+                $"Reason: {exception.Message}");
         }
     }
 
-    private async Task<Sprite> DownloadCoverSpriteAsync()
+    private async Task<Sprite> DownloadCoverSpriteAsync(int runId)
     {
         var coverUrl = _coverUrl
                        ?? throw new InvalidOperationException(
-                           "BeatLeader did not provide a cover URL.");
+                           "The ranking service did not provide a cover URL.");
         try
         {
-            return await DownloadCoverSpriteFromUrlAsync(coverUrl);
+            return await DownloadCoverSpriteFromUrlAsync(coverUrl, runId);
         }
         catch (Exception exception) when (_fallbackCoverUrl != null)
         {
             Plugin.Log.Warn(
                 $"Primary roulette cover could not be decoded; trying the API fallback: " +
                 exception.Message);
-            return await DownloadCoverSpriteFromUrlAsync(_fallbackCoverUrl);
+            return await DownloadCoverSpriteFromUrlAsync(_fallbackCoverUrl, runId);
         }
     }
 
-    private async Task<Sprite> DownloadCoverSpriteFromUrlAsync(string coverUrl)
+    private async Task<Sprite> DownloadCoverSpriteFromUrlAsync(string coverUrl, int runId)
     {
         using var downloadHandler = new DownloadHandlerTexture();
         using var request = UnityWebRequest.Get(coverUrl);
         request.SetRequestHeader("User-Agent", "BeatLocator/0.0.1");
+        request.timeout = CoverRequestTimeoutSeconds;
         request.downloadHandler = downloadHandler;
         request.disposeDownloadHandlerOnDispose = false;
 
         var operation = request.SendWebRequest();
         while (!operation.isDone)
         {
+            if (runId != _runId)
+            {
+                request.Abort();
+                throw new TaskCanceledException("The cover request was cancelled.");
+            }
+
             await Task.Delay(20);
         }
 
@@ -898,14 +914,9 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         _spinCoroutine = null;
         _spinFinished = true;
 
-        if (_coverLoaded)
-        {
-            RevealWinner();
-        }
-        else
-        {
-            SetStatus("Winner selected. Loading cover...");
-        }
+        // Cover loading is optional presentation work. Never hold the roulette
+        // state machine or its action buttons hostage to a network request.
+        RevealWinner();
     }
 
     private float GetTargetPosition(int selectedIndex)
@@ -1089,6 +1100,14 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         _revealCoroutine = StartCoroutine(FadeInWinner(_runId));
     }
 
+    private void ApplyLoadedCover(Sprite coverSprite)
+    {
+        var winnerCard = _dummyCovers[WinnerIndex];
+        winnerCard.sprite = coverSprite;
+        winnerCard.color = Color.white;
+        _heroCover.sprite = coverSprite;
+    }
+
     private IEnumerator FadeInWinner(int runId)
     {
         const float revealDuration = 0.35f;
@@ -1265,6 +1284,14 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
             _heroCoverButton.interactable = true;
         }
 
+        if (!TryUseVanillaPreviewMixer())
+        {
+            Plugin.Log.Error(
+                "Could not route the song preview through Beat Saber's music mixer; playback was blocked.");
+            SetPreviewIcon(false);
+            return;
+        }
+
         if (_previewPaused)
         {
             PauseMenuMusic();
@@ -1290,7 +1317,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     {
         var previewUrl = _previewUrl
                          ?? throw new InvalidOperationException(
-                             "BeatLeader did not provide a valid map hash for preview playback.");
+                             "The ranking service did not provide a valid map hash for preview playback.");
         using var request = UnityWebRequestMultimedia.GetAudioClip(previewUrl, AudioType.MPEG);
         request.SetRequestHeader("User-Agent", "BeatLocator/0.0.1");
         var operation = request.SendWebRequest();
@@ -1430,7 +1457,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         _fallbackCoverUrl = null;
 
         // Unity's built-in texture decoder does not support the WebP images used
-        // by some BeatLeader fullCoverImage values. Prefer the API's JPEG cover
+        // by some full-size cover values. Prefer the API's JPEG cover
         // for those maps; for decodable full covers, keep the JPEG as a fallback.
         if (fullCoverUrl != null && fullCoverUrl.Trim().Length > 0)
         {

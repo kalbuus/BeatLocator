@@ -91,7 +91,7 @@ internal static class BetterSongSearchDownloadManager
         }
 
         throw new InvalidDataException(
-            "BeatLeader did not provide a valid map SHA-1 hash or download URL.");
+            "The ranking service did not provide a valid map SHA-1 hash or download URL.");
     }
 
     private static string ExtractMapHash(string downloadUrl)

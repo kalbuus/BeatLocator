@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using BeatSaberMarkupLanguage.Attributes;
 using BeatSaberMarkupLanguage.ViewControllers;
+using BeatLocator.EvaluationManagers;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -24,6 +25,10 @@ public class BeatLeaderSelect : BSMLAutomaticViewController
     private readonly Button _exitButton = null!;
     [UIComponent("exit-icon")]
     private readonly Image _exitIcon = null!;
+    [UIComponent("beatleader-provider-logo")]
+    private readonly Image _beatLeaderProviderLogo = null!;
+    [UIComponent("scoresaber-provider-logo")]
+    private readonly Image _scoreSaberProviderLogo = null!;
 
     [UIComponent("played-toggle-button")]
     private readonly Button _playedToggleButton = null!;
@@ -43,6 +48,8 @@ public class BeatLeaderSelect : BSMLAutomaticViewController
     private readonly Image _difficultySelectionSliderImage = null!;
     [UIComponent("balance-segments")]
     private readonly RectTransform _balanceSegments = null!;
+    [UIComponent("balance-row")]
+    private readonly RectTransform _balanceRow = null!;
     [UIComponent("balance-selection-slider")]
     private readonly Image _balanceSelectionSliderImage = null!;
     [UIComponent("find-button")]
@@ -55,6 +62,8 @@ public class BeatLeaderSelect : BSMLAutomaticViewController
     private int _selectedDifficulty;
     private int _selectedBalance;
     private bool _searchInProgress;
+    private bool _parsed;
+    private RankingProvider _provider = RankingProvider.BeatLeader;
     private SegmentSelectionSlider? _difficultySelectionSlider;
     private SegmentSelectionSlider? _balanceSelectionSlider;
     private ToggleButtonVisual? _playedToggleVisual;
@@ -81,10 +90,19 @@ public class BeatLeaderSelect : BSMLAutomaticViewController
         _twoSaberEnabled = config.BeatLeaderTwoSaberEnabled;
         _secretEnabled = config.BeatLeaderSecretDifficultyEnabled;
 
-        // Persist normalized values if an older or manually edited config
-        // contains an index outside the available segment range.
+        // These values are deliberately shared by BeatLeader and ScoreSaber so
+        // switching providers never requires maintaining two configurations.
         config.BeatLeaderDifficultySelection = _selectedDifficulty;
         config.BeatLeaderBalanceSelection = _selectedBalance;
+    }
+
+    internal void ConfigureProvider(RankingProvider provider)
+    {
+        _provider = provider;
+        if (_parsed)
+        {
+            UpdateProviderControls();
+        }
     }
 
     [UIValue("difficulties")]
@@ -155,6 +173,9 @@ public class BeatLeaderSelect : BSMLAutomaticViewController
             _secretToggleButton,
             _secretToggleLabel,
             _secretEnabled);
+
+        _parsed = true;
+        UpdateProviderControls();
     }
 
     [UIAction("find-btn-action")]
@@ -163,6 +184,7 @@ public class BeatLeaderSelect : BSMLAutomaticViewController
         SetSearchInProgress(true);
 
         _flowCoordinator.FindMapAsync(
+            _provider,
             _playedEnabled,
             StarBuffer,
             _twoSaberEnabled,
@@ -179,6 +201,7 @@ public class BeatLeaderSelect : BSMLAutomaticViewController
     {
         base.DidActivate(firstActivation, addedToHierarchy, screenSystemEnabling);
         _findButton.interactable = !_searchInProgress;
+        UpdateProviderControls();
         ForceMenuLayoutRebuild();
         StartCoroutine(RebuildMenuLayoutNextFrame());
     }
@@ -200,6 +223,32 @@ public class BeatLeaderSelect : BSMLAutomaticViewController
         Canvas.ForceUpdateCanvases();
         LayoutRebuilder.ForceRebuildLayoutImmediate(viewRoot);
         Canvas.ForceUpdateCanvases();
+    }
+
+    private void UpdateProviderControls()
+    {
+        if (_beatLeaderProviderLogo != null)
+        {
+            _beatLeaderProviderLogo.gameObject.SetActive(
+                _provider == RankingProvider.BeatLeader);
+        }
+
+        if (_scoreSaberProviderLogo != null)
+        {
+            _scoreSaberProviderLogo.gameObject.SetActive(
+                _provider == RankingProvider.ScoreSaber);
+        }
+
+        if (_balanceRow != null)
+        {
+            _balanceRow.gameObject.SetActive(_provider == RankingProvider.BeatLeader);
+        }
+
+        if (_playedToggleButton != null)
+        {
+            _playedToggleButton.gameObject.SetActive(
+                _provider == RankingProvider.BeatLeader);
+        }
     }
 
     internal void SetSearchInProgress(bool searchInProgress)

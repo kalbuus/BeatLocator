@@ -77,10 +77,10 @@
             </vertical>
         </button>
     
-        <button id="scoresaber-button" on-click="scPressed" interactable="false"
+        <button id="scoresaber-button" on-click="scPressed"
                        stroke-visible="false"
                        text=""
-                       hover-hint="Coming soon"
+                       hover-hint="~scoreSaberButtonHover"
                        preferred-width="25" 
                        preferred-height="35" 
                        pad="2">
