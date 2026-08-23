@@ -968,7 +968,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         _rouletteAudioSource.PlayOneShot(_rouletteStopClip);
     }
 
-    private static AudioClip LoadPcmWave(string resourceName, string clipName)
+    internal static AudioClip LoadPcmWave(string resourceName, string clipName)
     {
         using var stream = typeof(RouletteAnimationViewController).Assembly
             .GetManifestResourceStream(resourceName)

@@ -14,6 +14,10 @@ internal sealed class NineSlicePanelRenderer : MonoBehaviour
     private RectTransform _root = null!;
     private RectTransform[] _sliceRects = Array.Empty<RectTransform>();
     private Image[] _sliceImages = Array.Empty<Image>();
+    private Color _color;
+    private Vector2 _lastPanelSize;
+    private Vector2 _lastLossyScale;
+    private bool _layoutInitialized;
 
     internal void Initialize(
         Sprite source,
@@ -28,11 +32,12 @@ internal sealed class NineSlicePanelRenderer : MonoBehaviour
         }
 
         CreateSlices(source, rendererTemplate, color);
-        UpdateLayout(_root.rect.size);
+        RefreshLayout();
     }
 
     internal void SetColor(Color color)
     {
+        _color = color;
         foreach (var sliceImage in _sliceImages)
         {
             if (sliceImage)
@@ -42,12 +47,46 @@ internal sealed class NineSlicePanelRenderer : MonoBehaviour
         }
     }
 
+    internal void Refresh()
+    {
+        RefreshLayout();
+        foreach (var sliceImage in _sliceImages)
+        {
+            if (!sliceImage) continue;
+
+            sliceImage.SetAllDirty();
+            sliceImage.canvasRenderer.SetColor(_color);
+        }
+    }
+
     private void LateUpdate()
     {
-        if (_root && _sliceRects.Length == 9)
+        if (!_root || _sliceRects.Length != 9) return;
+
+        var panelSize = _root.rect.size;
+        var lossyScale = (Vector2)_root.lossyScale;
+        if (!_layoutInitialized ||
+            !Approximately(panelSize, _lastPanelSize) ||
+            !Approximately(lossyScale, _lastLossyScale))
         {
-            UpdateLayout(_root.rect.size);
+            RefreshLayout();
         }
+    }
+
+    private void RefreshLayout()
+    {
+        if (!_root || _sliceRects.Length != 9) return;
+
+        _lastPanelSize = _root.rect.size;
+        _lastLossyScale = (Vector2)_root.lossyScale;
+        UpdateLayout(_lastPanelSize);
+        _layoutInitialized = true;
+    }
+
+    private static bool Approximately(Vector2 left, Vector2 right)
+    {
+        return Mathf.Approximately(left.x, right.x) &&
+               Mathf.Approximately(left.y, right.y);
     }
 
     private void CreateSlices(
@@ -55,6 +94,7 @@ internal sealed class NineSlicePanelRenderer : MonoBehaviour
         Image rendererTemplate,
         Color color)
     {
+        _color = color;
         var farEdge = 1f - SliceBorderUv;
         var sliceUvs = new[]
         {

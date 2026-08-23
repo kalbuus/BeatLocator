@@ -6,6 +6,6 @@ internal class BeatLocatorSettingsApplier : ISettingsApplier
 {
     public void Apply(PluginConfig config)
     {
-        BLEvaluationManager.RecalculatePlayerDifficultyRange(config);
+        RecommendationEngine.RecalculatePlayerDifficultyRanges(config);
     }
 }

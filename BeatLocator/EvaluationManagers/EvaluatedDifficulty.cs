@@ -1,15 +1,10 @@
-using BeatLocator.WebUtils;
-
 namespace BeatLocator.EvaluationManagers;
 
-/// <summary>
-/// A single map difficulty that can participate in the final map selection.
-/// </summary>
-public sealed class EvaluatedDifficulty
+internal sealed class EvaluatedDifficulty
 {
-    public EvaluatedDifficulty(
-        BLWebUtil.MapEntry map,
-        BLWebUtil.DifficultyEntry difficulty,
+    internal EvaluatedDifficulty(
+        RecommendationMap map,
+        RecommendationDifficulty difficulty,
         float score)
     {
         Map = map;
@@ -17,9 +12,9 @@ public sealed class EvaluatedDifficulty
         Score = score;
     }
 
-    public BLWebUtil.MapEntry Map { get; }
+    internal RecommendationMap Map { get; }
 
-    public BLWebUtil.DifficultyEntry Difficulty { get; }
+    internal RecommendationDifficulty Difficulty { get; }
 
-    public float Score { get; }
+    internal float Score { get; }
 }

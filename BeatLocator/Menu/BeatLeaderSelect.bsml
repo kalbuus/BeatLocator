@@ -15,14 +15,6 @@
                anchored-position="-35.5 0"
                size-delta="5.33 5.33"
                preserve-aspect="true" />
-        <image id="scoresaber-provider-logo"
-               src="BeatLocator.Assets.ss_logo.png"
-               ignore-layout="true"
-               anchor-min="0.5 0.5"
-               anchor-max="0.5 0.5"
-               anchored-position="-35.5 0"
-               size-delta="5.33 5.33"
-               preserve-aspect="true" />
         <horizontal bg="panel-top" pad-left="7" pad-right="7" pad-top="3" pad-bottom="3" horizontal-fit="PreferredSize" vertical-fit="PreferredSize">
             <image src="BeatLocator.Assets.logo.png"
                    pref-width="45.2"

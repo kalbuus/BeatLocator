@@ -5,14 +5,13 @@ using System.Runtime.ExceptionServices;
 using System.Runtime.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using BeatLocator.WebUtils;
+using BeatLocator.EvaluationManagers;
 using IPA.Loader;
 
 namespace BeatLocator.Integrations;
 
 /// <summary>
 /// Bridges BeatLocator to BetterSongSearch's internal downloader.
-/// BetterSongSearch 0.8.x does not expose a public download API.
 /// </summary>
 internal static class BetterSongSearchDownloadManager
 {
@@ -23,7 +22,7 @@ internal static class BetterSongSearchDownloadManager
         "BetterSongSearch.UI.DownloadHistoryView+DownloadHistoryEntry";
 
     public static async Task<bool> DownloadMapAsync(
-        BLWebUtil.MapEntry map,
+        RecommendationMap map,
         CancellationToken cancellationToken)
     {
         var hash = GetMapHash(map);
@@ -77,7 +76,7 @@ internal static class BetterSongSearchDownloadManager
         return true;
     }
 
-    internal static string GetMapHash(BLWebUtil.MapEntry map)
+    internal static string GetMapHash(RecommendationMap map)
     {
         if (map.Hash is string hash && IsSha1Hash(hash))
         {

@@ -175,7 +175,7 @@ internal static class BeatSaberLevelLauncher
 
     private static BeatmapKey FindBeatmapKey(
         BeatmapLevel level,
-        BeatLocator.WebUtils.BLWebUtil.DifficultyEntry selectedDifficulty)
+        RecommendationDifficulty selectedDifficulty)
     {
         if (!TryParseDifficulty(selectedDifficulty.DifficultyName, out var targetDifficulty))
         {

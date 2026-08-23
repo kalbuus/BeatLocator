@@ -1,0 +1,20 @@
+<vertical ignore-layout="true"
+          anchor-pos-y="8"
+          child-control-width="true"
+          child-control-height="true"
+          child-expand-width="false"
+          child-expand-height="false"
+          child-align="MiddleCenter"
+          spacing="1">
+    <text text="~loadingText"
+          align="Center"
+          font-size="6"
+          preferred-width="80"
+          preferred-height="8" />
+    <text text="~dotsText"
+          align="Center"
+          font-size="5"
+          color="#A8A8A8"
+          preferred-width="20"
+          preferred-height="6" />
+</vertical>

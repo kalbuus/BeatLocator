@@ -10,19 +10,12 @@ using Zenject;
 
 namespace BeatLocator.Menu;
 
-/// <summary>
-/// BeatLeader-only search settings. ScoreSaber has its own controller and BSML.
-/// </summary>
-public sealed class BeatLeaderSelect : BSMLAutomaticViewController
+public sealed class ScoreSaberSelect : BSMLAutomaticViewController
 {
     [UIComponent("exit-button")]
     private readonly Button _exitButton = null!;
     [UIComponent("exit-icon")]
     private readonly Image _exitIcon = null!;
-    [UIComponent("played-toggle-button")]
-    private readonly Button _playedToggleButton = null!;
-    [UIComponent("played-toggle-label")]
-    private readonly TMP_Text _playedToggleLabel = null!;
     [UIComponent("two-saber-toggle-button")]
     private readonly Button _twoSaberToggleButton = null!;
     [UIComponent("two-saber-toggle-label")]
@@ -35,10 +28,6 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
     private readonly RectTransform _difficultySegments = null!;
     [UIComponent("difficulty-selection-slider")]
     private readonly Image _difficultySelectionSliderImage = null!;
-    [UIComponent("balance-segments")]
-    private readonly RectTransform _balanceSegments = null!;
-    [UIComponent("balance-selection-slider")]
-    private readonly Image _balanceSelectionSliderImage = null!;
     [UIComponent("find-button")]
     private readonly Button _findButton = null!;
 
@@ -47,14 +36,10 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
     private Sprite? _nineSliceSprite;
     private Sprite? _exitIconSprite;
     private int _selectedDifficulty;
-    private int _selectedBalance;
-    private bool _playedEnabled;
     private bool _twoSaberEnabled;
     private bool _secretEnabled;
     private bool _searchInProgress;
     private SegmentSelectionSlider? _difficultySelectionSlider;
-    private SegmentSelectionSlider? _balanceSelectionSlider;
-    private ToggleButtonVisual? _playedToggleVisual;
     private ToggleButtonVisual? _twoSaberToggleVisual;
     private ToggleButtonVisual? _secretToggleVisual;
 
@@ -64,16 +49,6 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
     [UIValue("difficulties")]
     public List<string> DifficultiesList { get; set; } =
         RankingSelectViewSupport.CreateDifficulties();
-
-    [UIValue("balance")]
-    public List<string> BalancesList { get; set; } = new List<string>
-    {
-        "T  E  C  H",
-        "TECH",
-        "Balanced",
-        "PASS",
-        "P  A  S  S"
-    };
 
     [Inject]
     private void Construct(
@@ -85,15 +60,9 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
         _selectedDifficulty = RankingSelectViewSupport.NormalizeSelection(
             preferences.DifficultySelection,
             DifficultiesList.Count);
-        _selectedBalance = RankingSelectViewSupport.NormalizeSelection(
-            preferences.BalanceSelection,
-            BalancesList.Count);
-        _playedEnabled = preferences.PlayedEnabled;
         _twoSaberEnabled = preferences.TwoSaberEnabled;
         _secretEnabled = preferences.SecretDifficultyEnabled;
-
         preferences.DifficultySelection = _selectedDifficulty;
-        preferences.BalanceSelection = _selectedBalance;
     }
 
     [UIAction("#post-parse")]
@@ -104,7 +73,6 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
         _exitIconSprite ??= RankingSelectViewSupport.LoadSprite(
             RankingSelectViewSupport.ExitIconResource);
         _difficultySelectionSliderImage.sprite = _nineSliceSprite;
-        _balanceSelectionSliderImage.sprite = _nineSliceSprite;
 
         var exitVisual = _exitButton.gameObject.AddComponent<ExitButtonVisual>();
         exitVisual.Initialize(
@@ -122,19 +90,6 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
             DifficultiesList.Count,
             _selectedDifficulty);
 
-        _balanceSelectionSlider =
-            _balanceSelectionSliderImage.gameObject
-                .AddComponent<SegmentSelectionSlider>();
-        _balanceSelectionSlider.Initialize(
-            _balanceSegments,
-            _balanceSelectionSliderImage,
-            BalancesList.Count,
-            _selectedBalance);
-
-        _playedToggleVisual = CreateToggleVisual(
-            _playedToggleButton,
-            _playedToggleLabel,
-            _playedEnabled);
         _twoSaberToggleVisual = CreateToggleVisual(
             _twoSaberToggleButton,
             _twoSaberToggleLabel,
@@ -155,26 +110,14 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
         _difficultySelectionSlider?.MoveTo(_selectedDifficulty);
     }
 
-    [UIAction("balanceSelected")]
-    private void OnBalanceSelected(object segmentedControl, int index)
-    {
-        _selectedBalance = RankingSelectViewSupport.NormalizeSelection(
-            index,
-            BalancesList.Count);
-        _preferences.BalanceSelection = _selectedBalance;
-        _balanceSelectionSlider?.MoveTo(_selectedBalance);
-    }
-
     [UIAction("find-btn-action")]
     private void OnFindPressed()
     {
         SetSearchInProgress(true);
-        _flowCoordinator.FindBeatLeaderMapAsync(
-            _playedEnabled,
+        _flowCoordinator.FindScoreSaberMapAsync(
             RankingSelectViewSupport.StarBuffer,
             _twoSaberEnabled,
             _secretEnabled,
-            _selectedBalance,
             _selectedDifficulty,
             RankingSelectViewSupport.MapCount);
     }
@@ -182,14 +125,6 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
     internal void RepeatLastSearch()
     {
         OnFindPressed();
-    }
-
-    [UIAction("togglePlayed")]
-    private void OnTogglePlayed()
-    {
-        _playedEnabled = !_playedEnabled;
-        _preferences.PlayedEnabled = _playedEnabled;
-        _playedToggleVisual?.SetActive(_playedEnabled);
     }
 
     [UIAction("toggleTwoSaber")]

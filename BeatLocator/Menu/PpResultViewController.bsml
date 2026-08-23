@@ -1,0 +1,36 @@
+<vertical id="pp-root"
+          ignore-layout="true"
+          anchor-pos-y="8"
+          child-control-width="true"
+          child-control-height="true"
+          child-expand-width="false"
+          child-expand-height="false"
+          child-align="MiddleCenter"
+          spacing="1.5">
+    <text id="primary-value"
+          text="~primaryText"
+          align="Center"
+          font-size="18"
+          preferred-width="92"
+          preferred-height="20" />
+    <text text="~secondaryText"
+          align="Center"
+          font-size="5.5"
+          color="#A8A8A8"
+          preferred-width="92"
+          preferred-height="8" />
+    <horizontal id="button-row"
+                horizontal-fit="PreferredSize"
+                vertical-fit="PreferredSize"
+                child-align="MiddleCenter"
+                spacing="3">
+        <button text="MENU"
+                on-click="change-settings"
+                preferred-width="38"
+                preferred-height="8" />
+        <action-button text="NEXT"
+                       on-click="next"
+                       preferred-width="38"
+                       preferred-height="8" />
+    </horizontal>
+</vertical>

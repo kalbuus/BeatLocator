@@ -5,6 +5,8 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using BeatLocator.EvaluationManagers;
+using BeatLocator.PostLevel;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -20,7 +22,188 @@ internal static class SSWebUtil
 
     internal static string? UserId { get; private set; }
 
-    internal static async Task<List<BLWebUtil.ScoreEntry>?> FetchCurrentUserScoresAsync(
+    internal static async Task<ProviderPpBaseline?> CapturePpBaselineAsync(
+        IPlatformUserModel platformUserModel,
+        EvaluatedDifficulty selection,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var userInfo = await platformUserModel.GetUserInfo(cancellationToken);
+            if (string.IsNullOrWhiteSpace(userInfo.platformUserId)) return null;
+            var playerId = userInfo.platformUserId!;
+            UserId = playerId;
+
+            var profile = await GetJsonAsync<ScoreSaberBasicProfile>(
+                ScoreSaberApiBaseUrl +
+                $"/players/{Uri.EscapeDataString(playerId)}/basic",
+                cancellationToken);
+            var recentScores = await FetchRecentPpScoresAsync(
+                playerId,
+                MaximumApiPageSize,
+                cancellationToken);
+            var personalBest = recentScores.Find(score =>
+                IsMatchingScore(score, selection, null, null));
+            return new ProviderPpBaseline
+            {
+                PlayerId = playerId,
+                TotalPp = profile.Stats?.TotalPp,
+                PersonalBestModifiedScore = personalBest?.Score?.ModifiedScore,
+                PersonalBestPp = personalBest?.Score?.Pp,
+                CapturedAt = DateTimeOffset.UtcNow
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            Plugin.Log.Warn($"[PP] Could not capture ScoreSaber PP baseline: {exception.Message}");
+            return null;
+        }
+    }
+
+    internal static async Task<ProviderPpResult> ResolvePpAsync(
+        EvaluatedDifficulty selection,
+        ProviderPpBaseline? baseline,
+        DateTimeOffset launchedAt,
+        int modifiedScore,
+        CancellationToken cancellationToken)
+    {
+        if (baseline?.PersonalBestModifiedScore >= modifiedScore)
+        {
+            return new ProviderPpResult
+            {
+                Outcome = PpResolutionOutcome.NonPersonalBest,
+                Detail = $"Current attempt {modifiedScore} did not beat the pre-play PB " +
+                         $"{baseline.PersonalBestModifiedScore}."
+            };
+        }
+
+        var playerId = baseline?.PlayerId ?? UserId;
+        if (string.IsNullOrWhiteSpace(playerId))
+        {
+            return new ProviderPpResult
+            {
+                Outcome = PpResolutionOutcome.UploadFailed,
+                Detail = "ScoreSaber player ID is unavailable."
+            };
+        }
+        var resolvedPlayerId = playerId!;
+
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(120);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var recentScores = await FetchRecentPpScoresAsync(
+                resolvedPlayerId,
+                MaximumApiPageSize,
+                cancellationToken);
+            var uploadedScore = recentScores.Find(score =>
+                IsMatchingScore(score, selection, launchedAt, modifiedScore));
+            if (uploadedScore?.Score != null)
+            {
+                var profile = await GetJsonAsync<ScoreSaberBasicProfile>(
+                    ScoreSaberApiBaseUrl +
+                    $"/players/{Uri.EscapeDataString(resolvedPlayerId)}/basic",
+                    cancellationToken);
+                var profileGain = baseline?.TotalPp.HasValue == true &&
+                                  profile.Stats?.TotalPp.HasValue == true
+                    ? profile.Stats.TotalPp.Value - baseline.TotalPp.Value
+                    : (double?)null;
+                return new ProviderPpResult
+                {
+                    Outcome = PpResolutionOutcome.UploadedNewBest,
+                    ScorePp = uploadedScore.Score.Pp,
+                    ProfileGain = profileGain,
+                    Detail = $"score_id={uploadedScore.Score.Id}; profile gain is measured from " +
+                             "the before/after ScoreSaber totalPP snapshots"
+                };
+            }
+
+            await Task.Delay(2500, cancellationToken);
+        }
+
+        return new ProviderPpResult
+        {
+            Outcome = PpResolutionOutcome.TimedOut,
+            Detail = "The matching ScoreSaber personal best did not appear within 120 seconds."
+        };
+    }
+
+    private static async Task<List<ScoreSaberScoreEntry>> FetchRecentPpScoresAsync(
+        string playerId,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var uri = ScoreSaberApiBaseUrl +
+                  $"/players/{Uri.EscapeDataString(playerId)}/scores" +
+                  $"?page=1&limit={limit}&sort=recent";
+        var response = await GetJsonAsync<ScoreSaberScoresResponse>(uri, cancellationToken);
+        return response.Data ?? new List<ScoreSaberScoreEntry>();
+    }
+
+    private static bool IsMatchingScore(
+        ScoreSaberScoreEntry entry,
+        EvaluatedDifficulty selection,
+        DateTimeOffset? minimumCreatedAt,
+        int? modifiedScore)
+    {
+        if (entry.Score == null || !entry.Score.PersonalBest ||
+            entry.Leaderboard?.Map == null ||
+            !string.Equals(
+                entry.Leaderboard.Map.Hash,
+                selection.Map.Hash,
+                StringComparison.OrdinalIgnoreCase) ||
+            modifiedScore.HasValue && entry.Score.ModifiedScore != modifiedScore.Value ||
+            !string.Equals(
+                NormalizeDifficulty(entry.Leaderboard.Difficulty?.Difficulty),
+                NormalizeDifficultyName(selection.Difficulty.DifficultyName),
+                StringComparison.OrdinalIgnoreCase) ||
+            !ModesMatch(
+                entry.Leaderboard.Difficulty?.GameMode,
+                selection.Difficulty.ModeName))
+        {
+            return false;
+        }
+
+        if (!minimumCreatedAt.HasValue) return true;
+        return DateTimeOffset.TryParse(
+                   entry.Score.CreatedAt,
+                   CultureInfo.InvariantCulture,
+                   DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                   out var createdAt) &&
+               createdAt >= minimumCreatedAt.Value.AddSeconds(-10);
+    }
+
+    private static string NormalizeDifficulty(int? difficulty)
+    {
+        return difficulty.HasValue
+            ? GetDifficultyName(difficulty.Value, null).Replace("+", "plus").ToLowerInvariant()
+            : string.Empty;
+    }
+
+    private static string NormalizeDifficultyName(string? difficulty)
+    {
+        return (difficulty ?? string.Empty).Replace("+", "plus")
+            .Replace("_", string.Empty)
+            .ToLowerInvariant();
+    }
+
+    private static bool ModesMatch(string? actual, string? expected)
+    {
+        var actualNormalized = (actual ?? string.Empty).ToLowerInvariant();
+        var expectedNormalized = (expected ?? string.Empty).ToLowerInvariant();
+        if (actualNormalized.Contains("standard") && expectedNormalized.Contains("standard"))
+        {
+            return true;
+        }
+
+        return actualNormalized == expectedNormalized;
+    }
+
+    internal static async Task<List<PlayerScoreEntry>?> FetchCurrentUserScoresAsync(
         IPlatformUserModel platformUserModel,
         int playNumber,
         CancellationToken cancellationToken = default)
@@ -39,7 +222,7 @@ internal static class SSWebUtil
             var uri = ScoreSaberApiBaseUrl +
                       $"/players/{Uri.EscapeDataString(UserId)}/scores?page=1&limit={limit}&sort=recent";
             var response = await GetJsonAsync<ScoreSaberScoresResponse>(uri, cancellationToken);
-            var scores = new List<BLWebUtil.ScoreEntry>();
+            var scores = new List<PlayerScoreEntry>();
 
             foreach (var entry in response.Data ?? Enumerable.Empty<ScoreSaberScoreEntry>())
             {
@@ -57,13 +240,13 @@ internal static class SSWebUtil
                     continue;
                 }
 
-                scores.Add(new BLWebUtil.ScoreEntry
+                scores.Add(new PlayerScoreEntry
                 {
                     Accuracy = score.Accuracy,
                     Timepost = checked((int)playedAt.ToUnixTimeSeconds()),
-                    Leaderboard = new BLWebUtil.Leaderboard
+                    Leaderboard = new ScoreLeaderboard
                     {
-                        Difficulty = new BLWebUtil.DifficultyScoreEntry
+                        Difficulty = new ScoreDifficulty
                         {
                             Stars = stars.Value
                         }
@@ -84,7 +267,7 @@ internal static class SSWebUtil
         }
     }
 
-    internal static async Task<List<BLWebUtil.MapEntry>?> FindMapAsync(
+    internal static async Task<List<RecommendationMap>?> FindMapAsync(
         float expectedStars,
         float starBuffer,
         bool onlyTwoSaber,
@@ -129,7 +312,7 @@ internal static class SSWebUtil
 
             if (candidates.Count == 0)
             {
-                return new List<BLWebUtil.MapEntry>();
+                return new List<RecommendationMap>();
             }
 
             var mapDetails = await FetchBeatSaverMapsAsync(
@@ -203,11 +386,11 @@ internal static class SSWebUtil
         return maps;
     }
 
-    private static List<BLWebUtil.MapEntry> ConvertMaps(
+    private static List<RecommendationMap> ConvertMaps(
         IEnumerable<ScoreSaberLeaderboard> candidates,
         IReadOnlyDictionary<string, BeatSaverMapDetail> mapDetails)
     {
-        var maps = new List<BLWebUtil.MapEntry>();
+        var maps = new List<RecommendationMap>();
 
         foreach (var group in candidates.GroupBy(
                      candidate => candidate.Map!.Hash!,
@@ -220,7 +403,7 @@ internal static class SSWebUtil
                 string.Equals(candidate.Hash, scoreSaberMap.Hash, StringComparison.OrdinalIgnoreCase));
             var metadata = beatSaverMap?.Metadata;
 
-            var map = new BLWebUtil.MapEntry
+            var map = new RecommendationMap
             {
                 Id = scoreSaberMap.Bsid ?? beatSaverMap?.Id ?? scoreSaberMap.Id.ToString(CultureInfo.InvariantCulture),
                 Hash = scoreSaberMap.Hash,
@@ -231,14 +414,14 @@ internal static class SSWebUtil
                 CoverImage = scoreSaberMap.CoverUrl ?? version?.CoverUrl,
                 FullCoverImage = version?.CoverUrl ?? scoreSaberMap.CoverUrl,
                 DownloadUrl = version?.DownloadUrl,
-                duration = metadata?.Duration,
-                Difficulties = new List<BLWebUtil.DifficultyEntry>()
+                Duration = metadata?.Duration,
+                Difficulties = new List<RecommendationDifficulty>()
             };
 
             foreach (var leaderboard in group)
             {
                 var difficulty = leaderboard.Difficulty!;
-                map.Difficulties.Add(new BLWebUtil.DifficultyEntry
+                map.Difficulties.Add(new RecommendationDifficulty
                 {
                     DifficultyName = GetDifficultyName(difficulty.Difficulty, difficulty.RawDifficulty),
                     ModeName = difficulty.GameMode,
@@ -306,6 +489,8 @@ internal static class SSWebUtil
         client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "application/json");
         return client;
     }
+    
+    #region SCORE JSON
 
     private sealed class ScoreSaberScoresResponse
     {
@@ -327,6 +512,18 @@ internal static class SSWebUtil
 
     private sealed class ScoreSaberScore
     {
+        [JsonProperty("id")]
+        public long Id { get; set; }
+
+        [JsonProperty("modifiedScore")]
+        public int ModifiedScore { get; set; }
+
+        [JsonProperty("pp")]
+        public double Pp { get; set; }
+
+        [JsonProperty("personalBest")]
+        public bool PersonalBest { get; set; }
+
         [JsonProperty("accuracy")]
         public float Accuracy { get; set; }
 
@@ -335,6 +532,22 @@ internal static class SSWebUtil
 
         [JsonProperty("createdAt")]
         public string? CreatedAt { get; set; }
+    }
+    
+    #endregion
+    
+    #region PROFILE JSON
+
+    private sealed class ScoreSaberBasicProfile
+    {
+        [JsonProperty("stats")]
+        public ScoreSaberProfileStats? Stats { get; set; }
+    }
+
+    private sealed class ScoreSaberProfileStats
+    {
+        [JsonProperty("totalPP")]
+        public double? TotalPp { get; set; }
     }
 
     private sealed class ScoreSaberLeaderboardsResponse
@@ -357,7 +570,11 @@ internal static class SSWebUtil
         [JsonProperty("totalScores")]
         public int TotalScores { get; set; }
     }
+    
+    #endregion
 
+    #region MAP JSON
+    
     private sealed class ScoreSaberMap
     {
         [JsonProperty("id")]
@@ -438,6 +655,8 @@ internal static class SSWebUtil
         [JsonProperty("levelAuthorName")]
         public string? LevelAuthorName { get; set; }
     }
+    
+    #endregion
 
     private sealed class BeatSaverVersion
     {

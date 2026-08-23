@@ -6,26 +6,31 @@ using System.Net.Http;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using BeatLocator.EvaluationManagers;
 using IPA.Loader;
 using IPA.Utilities.Async;
 using Newtonsoft.Json;
+using BeatLocator.PostLevel;
 
 namespace BeatLocator.WebUtils;
 
-public static class BLWebUtil
+internal static class BLWebUtil
 {
     private const int AuthenticatedRequestTimeoutMilliseconds = 40000;
+    private const int PpSettlementTimeoutSeconds = 60;
+    private const int ZeroPpSettlementWindowSeconds = 30;
+    private const int ProfileFallbackGraceSeconds = 10;
     private const float MinimumRankedStars = 1f;
     private const float MaximumRankedStars = 15f;
     private static readonly HttpClient HttpClient = new HttpClient();
     
-    public static string? userId = string.Empty;
+    internal static string? userId = string.Empty;
     
     /// <summary>
     /// Waits for BeatLeader to finish its normal sign-in/profile request and then loads
     /// scores for the signed-in BeatLeader account.
     /// </summary>
-    public static async Task<List<ScoreEntry>?> FetchCurrentUserScoresAsync(
+    internal static async Task<List<PlayerScoreEntry>?> FetchCurrentUserScoresAsync(
         int playNumber,
         CancellationToken cancellationToken = default)
     {
@@ -39,7 +44,7 @@ public static class BLWebUtil
         return null;
     }
 
-    private static async Task<string?> GetBeatLeaderUserIdAsync(
+    internal static async Task<string?> GetBeatLeaderUserIdAsync(
         CancellationToken cancellationToken)
     {
         // ProfileManager receives /user/modinterface after BeatLeader's login succeeds.
@@ -73,7 +78,7 @@ public static class BLWebUtil
         return null;
     }
 
-    private static async Task<List<ScoreEntry>?> FetchScoresAsync(
+    private static async Task<List<PlayerScoreEntry>?> FetchScoresAsync(
         string userId,
         int playNumber,
         CancellationToken cancellationToken)
@@ -116,7 +121,7 @@ public static class BLWebUtil
         }
     }
 
-    internal static async Task<List<MapEntry>?> FindMapAsync(
+    internal static async Task<List<RecommendationMap>?> FindMapAsync(
         float expectedStars,
         bool played,
         float starBuffer,
@@ -175,7 +180,7 @@ public static class BLWebUtil
                 .ConfigureAwait(false);
             var result = JsonConvert.DeserializeObject<MapsResponse>(responseBody);
 
-            var maps = result?.Data ?? new List<MapEntry>();
+            var maps = result?.Data ?? new List<RecommendationMap>();
             foreach (var map in maps)
             {
                 if (map.Difficulties == null) continue;
@@ -287,6 +292,273 @@ public static class BLWebUtil
         }
     }
 
+    internal static async Task<ProviderPpBaseline?> CapturePpBaselineAsync(
+        EvaluatedDifficulty selection,
+        CancellationToken cancellationToken)
+    {
+        var playerId = await GetBeatLeaderUserIdAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(playerId)) return null;
+
+        try
+        {
+            var uri = GetBeatLeaderApiUrl() +
+                      $"/player/{Uri.EscapeDataString(playerId)}";
+            var profile = await GetPublicJsonAsync<BeatLeaderProfile>(uri, cancellationToken)
+                .ConfigureAwait(false);
+            var scoresUri = GetBeatLeaderApiUrl() +
+                            $"/player/{Uri.EscapeDataString(playerId)}/scores" +
+                            "?sortBy=date&order=desc&page=1&count=100";
+            var scores = await GetPublicJsonAsync<BeatLeaderPpScoresResponse>(
+                    scoresUri,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            var personalBest = scores.Data?.Find(score =>
+                IsMatchingBeatLeaderLeaderboard(score, selection));
+            Plugin.Log.Debug(
+                $"[PP] BeatLeader baseline: player_pp={profile.Pp.ToString("0.000000", CultureInfo.InvariantCulture)}, " +
+                $"pb_score_id={personalBest?.Id.ToString(CultureInfo.InvariantCulture) ?? "none"}.");
+            return new ProviderPpBaseline
+            {
+                PlayerId = playerId,
+                TotalPp = profile.Pp,
+                PersonalBestScoreId = personalBest?.Id,
+                PersonalBestModifiedScore = personalBest?.ModifiedScore,
+                PersonalBestPp = personalBest?.Pp,
+                CapturedAt = DateTimeOffset.UtcNow
+            };
+        }
+        catch (Exception exception) when (!(exception is OperationCanceledException))
+        {
+            Plugin.Log.Warn($"[PP] Could not capture BeatLeader PP baseline: {exception.Message}");
+            return new ProviderPpBaseline
+            {
+                PlayerId = playerId,
+                CapturedAt = DateTimeOffset.UtcNow
+            };
+        }
+    }
+
+    internal static async Task<ProviderPpResult> ResolveUploadedPpAsync(
+        EvaluatedDifficulty selection,
+        ProviderPpBaseline? baseline,
+        DateTimeOffset launchedAt,
+        int modifiedScore,
+        bool allowLegacyNonPbDetection,
+        CancellationToken cancellationToken)
+    {
+        var playerId = baseline?.PlayerId ??
+                       await GetBeatLeaderUserIdAsync(cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(playerId))
+        {
+            return new ProviderPpResult
+            {
+                Outcome = PpResolutionOutcome.UploadFailed,
+                Detail = "BeatLeader player ID is unavailable."
+            };
+        }
+
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(PpSettlementTimeoutSeconds);
+        var nonPbCheckAfter = DateTimeOffset.UtcNow.AddSeconds(20);
+        BeatLeaderPpScore? latestScore = null;
+        DateTimeOffset? scoreFirstSeenAt = null;
+        DateTimeOffset? profileGainFirstSeenAt = null;
+        double? measuredProfileGain = null;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var uri = GetBeatLeaderApiUrl() +
+                      $"/player/{Uri.EscapeDataString(playerId)}/scores" +
+                      "?sortBy=date&order=desc&page=1&count=20&includeIO=true";
+            var response = await GetPublicJsonAsync<BeatLeaderPpScoresResponse>(
+                    uri,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            var leaderboardScore = response.Data?.Find(candidate =>
+                IsMatchingBeatLeaderLeaderboard(candidate, selection));
+            var score = response.Data?.Find(candidate =>
+                IsMatchingBeatLeaderScore(
+                    candidate,
+                    selection,
+                    launchedAt,
+                    modifiedScore));
+            if (score != null)
+            {
+                latestScore = score;
+                if (!scoreFirstSeenAt.HasValue)
+                {
+                    scoreFirstSeenAt = DateTimeOffset.UtcNow;
+                    Plugin.Log.Info(
+                        $"[PP] BeatLeader score {score.Id} is visible; waiting for profile PP settlement.");
+                }
+                var reportedProfileGain = score.ScoreImprovement?.TotalPp;
+                if (reportedProfileGain.HasValue &&
+                    Math.Abs(reportedProfileGain.Value) > 0.000001d)
+                {
+                    return CreateBeatLeaderPpResult(
+                        score,
+                        reportedProfileGain,
+                        "profile gain was reported by scoreImprovement.totalPp");
+                }
+
+                if (baseline?.TotalPp.HasValue == true)
+                {
+                    var profileUri = GetBeatLeaderApiUrl() +
+                                     $"/player/{Uri.EscapeDataString(playerId)}";
+                    var profile = await GetPublicJsonAsync<BeatLeaderProfile>(
+                            profileUri,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    var currentMeasuredGain = profile.Pp - baseline.TotalPp.Value;
+                    if (Math.Abs(currentMeasuredGain) > 0.000001d)
+                    {
+                        if (!measuredProfileGain.HasValue ||
+                            Math.Abs(measuredProfileGain.Value - currentMeasuredGain) > 0.0005d)
+                        {
+                            measuredProfileGain = currentMeasuredGain;
+                            profileGainFirstSeenAt = DateTimeOffset.UtcNow;
+                        }
+
+                        if (profileGainFirstSeenAt.HasValue &&
+                            DateTimeOffset.UtcNow - profileGainFirstSeenAt.Value >=
+                            TimeSpan.FromSeconds(ProfileFallbackGraceSeconds))
+                        {
+                            return CreateBeatLeaderPpResult(
+                                score,
+                                measuredProfileGain,
+                                "profile gain was measured from stable before/after player.pp snapshots");
+                        }
+                    }
+                }
+
+                if (DateTimeOffset.UtcNow - scoreFirstSeenAt.Value >=
+                    TimeSpan.FromSeconds(ZeroPpSettlementWindowSeconds))
+                {
+                    return CreateBeatLeaderPpResult(
+                        score,
+                        measuredProfileGain ?? reportedProfileGain ?? 0d,
+                        "BeatLeader profile remained stable throughout the PP settlement window");
+                }
+            }
+
+            if (allowLegacyNonPbDetection &&
+                DateTimeOffset.UtcNow >= nonPbCheckAfter &&
+                baseline?.PersonalBestScoreId.HasValue == true &&
+                leaderboardScore?.Id == baseline.PersonalBestScoreId.Value)
+            {
+                return new ProviderPpResult
+                {
+                    Outcome = PpResolutionOutcome.NonPersonalBest,
+                    Detail = $"BeatLeader kept pre-play score {leaderboardScore.Id}; " +
+                             "the 0.9.x upload API does not expose a separate NonPB status."
+                };
+            }
+
+            await Task.Delay(2500, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (latestScore != null)
+        {
+            return CreateBeatLeaderPpResult(
+                latestScore,
+                measuredProfileGain ?? latestScore.ScoreImprovement?.TotalPp ?? 0d,
+                "PP settlement reached the overall timeout; using the last stable provider value");
+        }
+
+        return new ProviderPpResult
+        {
+            Outcome = PpResolutionOutcome.TimedOut,
+            Detail = "BeatLeader accepted the upload, but the matching score did not appear in the public API."
+        };
+    }
+
+    private static ProviderPpResult CreateBeatLeaderPpResult(
+        BeatLeaderPpScore score,
+        double? profileGain,
+        string source)
+    {
+        return new ProviderPpResult
+        {
+            Outcome = PpResolutionOutcome.UploadedNewBest,
+            ScorePp = score.Pp,
+            ProfileGain = profileGain,
+            Detail = $"score_id={score.Id}, raw_pp_improvement=" +
+                     $"{score.ScoreImprovement?.Pp.ToString("0.00", CultureInfo.InvariantCulture) ?? "n/a"}; " +
+                     source
+        };
+    }
+
+    private static bool IsMatchingBeatLeaderScore(
+        BeatLeaderPpScore score,
+        EvaluatedDifficulty selection,
+        DateTimeOffset launchedAt,
+        int modifiedScore)
+    {
+        if (!IsMatchingBeatLeaderLeaderboard(score, selection) ||
+            score.ModifiedScore != modifiedScore ||
+            score.Timepost < launchedAt.AddSeconds(-10).ToUnixTimeSeconds())
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsMatchingBeatLeaderLeaderboard(
+        BeatLeaderPpScore score,
+        EvaluatedDifficulty selection)
+    {
+        var expectedHash = selection.Map.Hash;
+        if (string.IsNullOrWhiteSpace(expectedHash) ||
+            !string.Equals(
+                score.Leaderboard?.Song?.Hash,
+                expectedHash,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var expectedDifficulty = NormalizeDifficulty(selection.Difficulty.DifficultyName);
+        var actualDifficulty = NormalizeDifficulty(score.Leaderboard?.Difficulty?.DifficultyName);
+        var expectedMode = NormalizeMode(selection.Difficulty.ModeName);
+        var actualMode = NormalizeMode(score.Leaderboard?.Difficulty?.ModeName);
+        return expectedDifficulty == actualDifficulty && expectedMode == actualMode;
+    }
+
+    private static string NormalizeDifficulty(string? value)
+    {
+        return (value ?? string.Empty).Replace("+", "plus")
+            .Replace("_", string.Empty)
+            .ToLowerInvariant();
+    }
+
+    private static string NormalizeMode(string? value)
+    {
+        var normalized = (value ?? string.Empty).Replace("_", string.Empty)
+            .ToLowerInvariant();
+        return normalized.Contains("standard") ? "standard" : normalized;
+    }
+
+    private static async Task<T> GetPublicJsonAsync<T>(
+        string uri,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        request.Headers.TryAddWithoutValidation("Accept", "application/json");
+        using var response = await HttpClient.SendAsync(request, cancellationToken)
+            .ConfigureAwait(false);
+        var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                $"BeatLeader returned {(int)response.StatusCode} ({response.ReasonPhrase}): {body}");
+        }
+
+        return JsonConvert.DeserializeObject<T>(body)
+               ?? throw new JsonException("BeatLeader returned an empty or invalid response.");
+    }
+
     private static async Task<byte[]> AwaitAuthenticatedResponseAsync(
         IEnumerator coroutine,
         Task<byte[]> responseTask)
@@ -317,100 +589,88 @@ public static class BLWebUtil
             TaskScheduler.Default);
     }
 
-    #region SCORE JSON
+    #region SCORE/PROFILE JSON
 
-    public sealed class ScoresResponse
+    private sealed class ScoresResponse
     {
         [JsonProperty("data")]
-        public List<ScoreEntry>? Data { get; set; }
-    }
-    
-    public sealed class ScoreEntry
-    {
-        [JsonProperty("accuracy")]
-        public float Accuracy { get; set; }
-        
-        [JsonProperty("timepost")]
-        public int Timepost { get; set; } // Unix timestamp to know when the level was played
-
-        [JsonProperty("leaderboard")]
-        public Leaderboard? Leaderboard { get; set; }
-    }
-    
-    public sealed class Leaderboard
-    {
-        [JsonProperty("difficulty")]
-        public DifficultyScoreEntry? Difficulty { get; set; }
+        public List<PlayerScoreEntry>? Data { get; set; }
     }
 
-    public sealed class DifficultyScoreEntry
+    private sealed class BeatLeaderProfile
     {
-        [JsonProperty("stars")]
-        public float? Stars { get; set; }
+        [JsonProperty("pp")]
+        public double Pp { get; set; }
     }
 
-    #endregion
-    
-    #region MAPS JSON
-    
-    public sealed class MapsResponse
+    private sealed class BeatLeaderPpScoresResponse
     {
         [JsonProperty("data")]
-        public List<MapEntry>? Data { get; set; }
+        public List<BeatLeaderPpScore>? Data { get; set; }
     }
 
-    public sealed class MapEntry
+    private sealed class BeatLeaderPpScore
     {
         [JsonProperty("id")]
-        public string? Id { get; set; }
+        public long Id { get; set; }
 
-        [JsonProperty("hash")]
-        public string? Hash { get; set; }
-        
-        [JsonProperty("name")]
-        public string? Name { get; set; }
-        
-        [JsonProperty("subName")]
-        public string? SubName { get; set; }
+        [JsonProperty("modifiedScore")]
+        public int ModifiedScore { get; set; }
 
-        [JsonProperty("author")]
-        public string? Author { get; set; }
-        
-        [JsonProperty("mapper")]
-        public string? Mapper { get; set; }
-        
-        [JsonProperty("coverImage")]
-        public string? CoverImage { get; set; }
+        [JsonProperty("pp")]
+        public double Pp { get; set; }
 
-        [JsonProperty("fullCoverImage")]
-        public string? FullCoverImage { get; set; }
-        
-        [JsonProperty("downloadUrl")]
-        public string? DownloadUrl { get; set; }
-        
-        [JsonProperty("duration")]
-        public int? duration { get; set; } // duration in seconds
-        
-        [JsonProperty("difficulties")]
-        public List<DifficultyEntry>? Difficulties { get; set; }
+        [JsonProperty("timepost")]
+        public long Timepost { get; set; }
+
+        [JsonProperty("leaderboard")]
+        public BeatLeaderPpLeaderboard? Leaderboard { get; set; }
+
+        [JsonProperty("scoreImprovement")]
+        public BeatLeaderScoreImprovement? ScoreImprovement { get; set; }
     }
 
-    public sealed class DifficultyEntry
+    private sealed class BeatLeaderPpLeaderboard
+    {
+        [JsonProperty("song")]
+        public BeatLeaderPpSong? Song { get; set; }
+
+        [JsonProperty("difficulty")]
+        public BeatLeaderPpDifficulty? Difficulty { get; set; }
+    }
+
+    private sealed class BeatLeaderPpSong
+    {
+        [JsonProperty("hash")]
+        public string? Hash { get; set; }
+    }
+
+    private sealed class BeatLeaderPpDifficulty
     {
         [JsonProperty("difficultyName")]
         public string? DifficultyName { get; set; }
-        
-        [JsonProperty("modeName")] // For only two saber mode can be either "Standard" or include the word "Standard"
+
+        [JsonProperty("modeName")]
         public string? ModeName { get; set; }
-        
-        [JsonProperty("stars")]
-        public float? Stars {get; set;}
-        
-        [JsonProperty("passRating")]
-        public float? PassRating { get; set; }
-        
-        [JsonProperty("techRating")]
-        public float? TechRating { get; set; }
+    }
+
+    private sealed class BeatLeaderScoreImprovement
+    {
+        [JsonProperty("pp")]
+        public double Pp { get; set; }
+
+        [JsonProperty("totalPp")]
+        public double TotalPp { get; set; }
+    }
+
+    #endregion
+
+    #region MAPS JSON
+
+    private sealed class MapsResponse
+    {
+        [JsonProperty("data")]
+        public List<RecommendationMap>? Data { get; set; }
     }
     
     #endregion

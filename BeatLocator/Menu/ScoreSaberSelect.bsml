@@ -1,0 +1,107 @@
+<vertical child-control-height="false" child-expand-height="false" child-expand-width="false" child-align="UpperCenter" spacing="3.5">
+    <horizontal horizontal-fit="PreferredSize"
+                vertical-fit="PreferredSize"
+                child-control-width="false"
+                child-control-height="false"
+                child-expand-width="false"
+                child-expand-height="false"
+                child-align="MiddleCenter">
+        <image src="BeatLocator.Assets.ss_logo.png"
+               ignore-layout="true"
+               anchor-min="0.5 0.5"
+               anchor-max="0.5 0.5"
+               anchored-position="-35.5 0"
+               size-delta="5.33 5.33"
+               preserve-aspect="true" />
+        <horizontal bg="panel-top" pad-left="7" pad-right="7" pad-top="3" pad-bottom="3" horizontal-fit="PreferredSize" vertical-fit="PreferredSize">
+            <image src="BeatLocator.Assets.logo.png"
+                   pref-width="45.2"
+                   pref-height="5"
+                   preserve-aspect="true" />
+        </horizontal>
+    </horizontal>
+
+    <button id="exit-button"
+            text=""
+            on-click="exitPressed"
+            stroke-visible="false"
+            ignore-layout="true"
+            anchor-pos-x="91"
+            anchor-pos-y="-6"
+            pref-width="6.7"
+            pref-height="6.7"
+            size-delta="6.7 6.7"
+            pad="0">
+        <image id="exit-icon"
+               ignore-layout="true"
+               anchor-min="0.5 0.5"
+               anchor-max="0.5 0.5"
+               anchored-position="0 0"
+               size-delta="3 3"
+               preserve-aspect="true" />
+    </button>
+
+    <vertical horizontal-fit="PreferredSize"
+              vertical-fit="PreferredSize"
+              child-control-height="false"
+              child-expand-height="false"
+              child-expand-width="false"
+              child-align="UpperCenter"
+              spacing="0">
+        <horizontal pad="2"
+                    preferred-width="100"
+                    preferred-height="11"
+                    child-control-width="true"
+                    child-control-height="true"
+                    child-align="MiddleCenter">
+            <text align="Left" text="Difficulty" color="#9E9E9E" />
+            <text-segments id="difficulty-segments" data="difficulties" select-cell="difficultySelected" size-delta-y="7" />
+            <image id="difficulty-selection-slider"
+                   ignore-layout="true" />
+        </horizontal>
+
+        <horizontal preferred-width="1" preferred-height="2" />
+
+        <horizontal preferred-width="100"
+                    preferred-height="7"
+                    child-control-width="false"
+                    child-control-height="false"
+                    child-expand-width="false"
+                    child-expand-height="false"
+                    child-align="MiddleCenter"
+                    spacing="2">
+            <button id="two-saber-toggle-button"
+                    text=""
+                    stroke-visible="false"
+                    on-click="toggleTwoSaber"
+                    preferred-width="32"
+                    preferred-height="7"
+                    pad="0">
+                <text id="two-saber-toggle-label"
+                      align="Center"
+                      text="Two Saber Only"
+                      font-size="3.1"
+                      word-wrap="false" />
+            </button>
+            <button id="secret-toggle-button"
+                    text=""
+                    stroke-visible="false"
+                    on-click="toggleSecretDifficulty"
+                    preferred-width="32"
+                    preferred-height="7"
+                    pad="0">
+                <text id="secret-toggle-label"
+                      align="Center"
+                      text="Secret Difficulty"
+                      font-size="3.1"
+                      word-wrap="false" />
+            </button>
+        </horizontal>
+    </vertical>
+
+    <action-button id="find-button"
+                   text="~findButtonText"
+                   on-click="find-btn-action"
+                   preferred-width="95"
+                   preferred-height="11" />
+</vertical>

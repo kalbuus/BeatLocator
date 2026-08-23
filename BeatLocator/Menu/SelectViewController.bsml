@@ -105,4 +105,11 @@
             pref-height="10"
             font-size="4" />
 
+    <button on-click="debugCompletedPressed"
+            text="DEBUG: LEVEL COMPLETED"
+            hover-hint="Temporary post-level UI test"
+            pref-width="83"
+            pref-height="8"
+            font-size="3.5" />
+
 </vertical>

@@ -1,0 +1,32 @@
+<vertical ignore-layout="true"
+          anchor-pos-y="8"
+          child-control-width="true"
+          child-control-height="true"
+          child-expand-width="false"
+          child-expand-height="false"
+          child-align="MiddleCenter"
+          spacing="4">
+    <text text="~statusText"
+          align="Center"
+          font-size="9"
+          preferred-width="92"
+          preferred-height="12" />
+    <horizontal id="button-row"
+                horizontal-fit="PreferredSize"
+                vertical-fit="PreferredSize"
+                child-align="MiddleCenter"
+                spacing="2">
+        <button text="MENU"
+                on-click="menu"
+                preferred-width="27"
+                preferred-height="8" />
+        <button text="RETRY"
+                on-click="retry"
+                preferred-width="27"
+                preferred-height="8" />
+        <action-button text="SKIP"
+                       on-click="skip"
+                       preferred-width="27"
+                       preferred-height="8" />
+    </horizontal>
+</vertical>

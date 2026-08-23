@@ -223,6 +223,12 @@ public class SelectViewController : BSMLAutomaticViewController
         UnityEngine.Application.OpenURL(FeedbackUrl);
     }
 
+    [UIAction("debugCompletedPressed")]
+    private void OnDebugCompletedPressed()
+    {
+        _flowCoordinator.ShowDebugCompletedLevel();
+    }
+
     [UIAction("exitPressed")]
     private void OnExitPressed()
     {

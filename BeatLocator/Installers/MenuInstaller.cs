@@ -1,5 +1,6 @@
 using Zenject;
 using BeatLocator.Menu;
+using BeatLocator.Settings;
 
 namespace BeatLocator.Installers;
 
@@ -17,6 +18,7 @@ internal class MenuInstaller : Installer
         // Is the same as:
         Container.BindInterfacesTo<SettingsMenuManager>().AsSingle();
         Container.BindInterfacesTo<MenuManager>().AsSingle();
+        Container.Bind<RankingSearchPreferences>().AsSingle();
 
         // This will create a single instance of SettingsMenu, and lets it be injected into other types
         Container.Bind<SettingsMenu>().AsSingle();
@@ -29,12 +31,32 @@ internal class MenuInstaller : Installer
             .FromNewComponentAsViewController()
             .AsSingle();
 
+        // These bindings stay lazy through LazyInject in the flow coordinator;
+        // provider BSML is not created until that provider is actually opened.
         Container.Bind<BeatLeaderSelect>()
+            .FromNewComponentAsViewController()
+            .AsSingle();
+
+        Container.Bind<ScoreSaberSelect>()
             .FromNewComponentAsViewController()
             .AsSingle();
 
         Container.Bind<RouletteAnimationViewController>()
             .FromNewComponentAsViewController()
             .AsSingle();
+
+        Container.Bind<PpResultViewController>()
+            .FromNewComponentAsViewController()
+            .AsSingle();
+
+        Container.Bind<PostLevelLoadingViewController>()
+            .FromNewComponentAsViewController()
+            .AsSingle();
+
+        Container.Bind<PostLevelTerminalViewController>()
+            .FromNewComponentAsViewController()
+            .AsSingle();
+
+        Container.BindInterfacesTo<PostLevelMenuPresenter>().AsSingle();
     }
 }
