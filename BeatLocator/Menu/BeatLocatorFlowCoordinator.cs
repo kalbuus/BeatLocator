@@ -1,6 +1,7 @@
 using BeatLocator.EvaluationManagers;
 using BeatLocator.Integrations;
 using BeatLocator.PostLevel;
+using BeatLocator.Settings;
 using HMUI;
 using System;
 using System.Collections.Generic;
@@ -28,7 +29,10 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     private const int MapSearchTimeoutMilliseconds = 45000;
     private const int MapDownloadTimeoutMilliseconds = 120000;
     private const float LaunchFadeDurationSeconds = 0.15f;
-    private const float PostLevelFadeDurationSeconds = 0.22f;
+    // Beat Saber's FadeIn reveals the final BeatLocator screen.
+    private const float PostLevelRevealDurationSeconds = 0.15f;
+    private const int FailedSoloSettleDelayMilliseconds = 450;
+    private const int FailedTerminalWatchdogMilliseconds = 3000;
 
     private MainFlowCoordinator _mainFlowCoordinator = null!;
     private SoloFreePlayFlowCoordinator _soloFreePlayFlowCoordinator = null!;
@@ -50,7 +54,6 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     private object? _fadeInOutController;
     private bool _launchFadeActive;
     private bool _postLevelFadeActive;
-    private TaskCompletionSource<bool>? _postLevelFadeCompletionSource;
     private RankingProvider _rankingProvider = RankingProvider.BeatLeader;
     private PluginConfig _config = null!;
     private RoulettePlaySessionManager _playSessionManager = null!;
@@ -59,6 +62,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     private bool _nextSearchFromPostLevel;
     private PostLevelDisplayResult? _pendingPostLevelResult;
     private EvaluatedDifficulty? _postLevelRetrySelection;
+    private static BeatLocatorFlowCoordinator? _activeInstance;
 
     [Inject]
     private void Construct(
@@ -76,6 +80,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         PluginConfig config,
         RoulettePlaySessionManager playSessionManager)
     {
+        _activeInstance = this;
         _mainFlowCoordinator = mainFlowCoordinator;
         _soloFreePlayFlowCoordinator = soloFreePlayFlowCoordinator;
         _platformUserModel = platformUserModel;
@@ -90,10 +95,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         _config = config;
         _playSessionManager = playSessionManager;
 
-        _fadeInOutController = typeof(MainFlowCoordinator).GetField(
-                "_fadeInOut",
-                BindingFlags.NonPublic | BindingFlags.Instance)
-            ?.GetValue(mainFlowCoordinator);
+        RefreshFadeInOutController();
         if (_fadeInOutController == null)
         {
             Plugin.Log.Warn(
@@ -239,24 +241,32 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
             _mainFlowCoordinator.DismissFlowCoordinator(
                 _soloFreePlayFlowCoordinator,
                 ViewController.AnimationDirection.Horizontal,
-                () => _mainFlowCoordinator.PresentFlowCoordinator(
-                    this,
-                    () =>
-                    {
-                        _activeRankingSelect = null;
-                        ReplaceTopViewController(
-                            _postLevelTerminalViewController,
-                            () =>
-                            {
-                                _postLevelPresentationInProgress = false;
-                                _postLevelFlowReady = true;
-                                FadeInAfterPostLevelTransition();
-                            },
-                            ViewController.AnimationType.None,
-                            ViewController.AnimationDirection.Horizontal);
-                    },
-                    ViewController.AnimationDirection.Horizontal,
-                    false),
+                () =>
+                {
+                    Plugin.Log.Info(
+                        "[PP UI] Solo flow dismissed for terminal; presenting BeatLocator flow.");
+                    _mainFlowCoordinator.PresentFlowCoordinator(
+                        this,
+                        () =>
+                        {
+                            Plugin.Log.Info(
+                                "[PP UI] BeatLocator flow presented; activating terminal view.");
+                            _activeRankingSelect = null;
+                            ReplaceTopViewController(
+                                _postLevelTerminalViewController,
+                                () =>
+                                {
+                                    Plugin.Log.Info("[PP UI] Terminal view is active; removing black.");
+                                    _postLevelPresentationInProgress = false;
+                                    _postLevelFlowReady = true;
+                                    FadeInAfterPostLevelTransition();
+                                },
+                                ViewController.AnimationType.None,
+                                ViewController.AnimationDirection.Horizontal);
+                        },
+                        ViewController.AnimationDirection.Horizontal,
+                        false);
+                },
                 false);
         }
         catch (Exception exception)
@@ -269,52 +279,163 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     internal Task FadeOutForPostLevelTransitionAsync()
     {
+        RefreshFadeInOutController();
         if (_fadeInOutController == null) return Task.CompletedTask;
-        if (_postLevelFadeActive)
-        {
-            return _postLevelFadeCompletionSource?.Task ?? Task.CompletedTask;
-        }
 
         try
         {
-            var fadeOutMethod = _fadeInOutController.GetType().GetMethod(
-                "FadeOut",
-                BindingFlags.Public | BindingFlags.Instance,
-                null,
-                new[] { typeof(float), typeof(Action) },
-                null)
-                ?? throw new MissingMethodException(
-                    _fadeInOutController.GetType().Name,
-                    "FadeOut(float, Action)");
-            var completionSource = new TaskCompletionSource<bool>();
-            _postLevelFadeCompletionSource = completionSource;
+            ApplyPostLevelBlackInstantly();
             _postLevelFadeActive = true;
-            fadeOutMethod.Invoke(
-                _fadeInOutController,
-                new object[]
-                {
-                    PostLevelFadeDurationSeconds,
-                    new Action(() => completionSource.TrySetResult(true))
-                });
-            return completionSource.Task;
+            Plugin.Log.Info(
+                "[PP UI] Applied Beat Saber's instant full-screen fade to black.");
+            return Task.CompletedTask;
         }
         catch (Exception exception)
         {
             _postLevelFadeActive = false;
-            _postLevelFadeCompletionSource?.TrySetResult(false);
-            _postLevelFadeCompletionSource = null;
             Plugin.Log.Error($"[PP UI] Could not fade out the menu: {exception}");
             return Task.CompletedTask;
         }
     }
 
+    private void ApplyPostLevelBlackInstantly()
+    {
+        if (_fadeInOutController == null) return;
+
+        var fadeOutInstantMethod = _fadeInOutController.GetType().GetMethod(
+                "FadeOutInstant",
+                BindingFlags.Public | BindingFlags.Instance,
+                null,
+                Type.EmptyTypes,
+                null)
+            ?? throw new MissingMethodException(
+                _fadeInOutController.GetType().Name,
+                "FadeOutInstant()");
+        fadeOutInstantMethod.Invoke(_fadeInOutController, Array.Empty<object>());
+
+        // FadeOutInstant stops any running fade coroutine. If that coroutine
+        // had already marked the controller as transitioning, clear the stale
+        // flag because the zero-duration method itself does not do it.
+        var transitionSetter = _fadeInOutController.GetType().GetMethod(
+            "set_inTransition",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+        transitionSetter?.Invoke(_fadeInOutController, new object[] { false });
+    }
+
+    private void RefreshFadeInOutController()
+    {
+        if (_mainFlowCoordinator == null) return;
+
+        var currentController = typeof(MainFlowCoordinator).GetField(
+                "_fadeInOut",
+                BindingFlags.NonPublic | BindingFlags.Instance)
+            ?.GetValue(_mainFlowCoordinator);
+        if (currentController == null ||
+            ReferenceEquals(currentController, _fadeInOutController))
+        {
+            return;
+        }
+
+        if (_fadeInOutController != null)
+        {
+            Plugin.Log.Info(
+                "[PP UI] Menu fade controller changed; applying black to the current scene.");
+        }
+
+        _fadeInOutController = currentController;
+        if (_postLevelFadeActive)
+        {
+            ApplyPostLevelBlackInstantly();
+        }
+    }
+
+    internal static Task FadeOutActiveForPostLevelTransitionAsync()
+    {
+        var instance = _activeInstance;
+        if (instance != null)
+        {
+            return instance.FadeOutForPostLevelTransitionAsync();
+        }
+
+        Plugin.Log.Warn(
+            "[PP UI] Active menu fade controller is unavailable for the post-level transition.");
+        return Task.CompletedTask;
+    }
+
+    internal static void RecoverActivePostLevelTransition()
+    {
+        var instance = _activeInstance;
+        if (instance != null)
+        {
+            instance.RecoverStalledPostLevelTransition();
+        }
+    }
+
+    internal static void PresentPendingFailedTerminalWhenSoloReady()
+    {
+        var instance = _activeInstance;
+        if (instance == null)
+        {
+            Plugin.Log.Error(
+                "[PP UI] Cannot present the pending failed terminal: " +
+                "the active BeatLocator flow is unavailable.");
+            return;
+        }
+
+        instance.PresentPendingFailedTerminalWhenSoloReadyAsync();
+    }
+
+    private async void PresentPendingFailedTerminalWhenSoloReadyAsync()
+    {
+        var uiState = PostLevelUiState.Instance;
+        if (uiState == null ||
+            !uiState.TryTakeTerminal(out var terminal) ||
+            terminal?.LevelFailed != true)
+        {
+            // A live PostLevelMenuPresenter may already own this terminal.
+            return;
+        }
+
+        Plugin.Log.Info(
+            $"[PP UI] Flow coordinator claimed pending failed terminal for run " +
+            $"{terminal.RunId}.");
+
+        // Use the same transition that already works for the completed-level
+        // loading screen: keep the global layer fully black while vanilla
+        // restores Solo, replace Solo with BeatLocator, then remove black only
+        // from the terminal view's activation callback.
+        await Task.Delay(FailedSoloSettleDelayMilliseconds);
+        await FadeOutForPostLevelTransitionAsync();
+        Plugin.Log.Info(
+            $"[PP UI] Black screen is holding; presenting failed terminal for run " +
+            $"{terminal.RunId} through the standard post-level flow.");
+        PresentPostLevelTerminal(terminal);
+        await Task.Delay(FailedTerminalWatchdogMilliseconds);
+        if (IsPostLevelFadeActive)
+        {
+            Plugin.Log.Error(
+                $"[PP UI] Failed terminal for run {terminal.RunId} did not finish opening.");
+            RecoverStalledPostLevelTransition();
+        }
+    }
+
+    internal bool IsPostLevelFadeActive => _postLevelFadeActive;
+    internal static bool ShouldHoldPostLevelBlack =>
+        _activeInstance?._postLevelFadeActive == true;
+
+    internal void RecoverStalledPostLevelTransition()
+    {
+        _postLevelPresentationInProgress = false;
+        _postLevelFlowReady = false;
+        FadeInAfterPostLevelTransition();
+    }
+
     internal void FadeInAfterPostLevelTransition()
     {
+        RefreshFadeInOutController();
         if (!_postLevelFadeActive || _fadeInOutController == null) return;
 
         _postLevelFadeActive = false;
-        _postLevelFadeCompletionSource?.TrySetResult(true);
-        _postLevelFadeCompletionSource = null;
         try
         {
             var fadeInMethod = _fadeInOutController.GetType().GetMethod(
@@ -328,7 +449,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                     "FadeIn(float)");
             fadeInMethod.Invoke(
                 _fadeInOutController,
-                new object[] { PostLevelFadeDurationSeconds });
+                new object[] { PostLevelRevealDurationSeconds });
         }
         catch (Exception exception)
         {
@@ -476,6 +597,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     }
 
     internal void FindScoreSaberMapAsync(
+        ScoreSaberPlayedFilter playedFilter,
         float starBuffer,
         bool onlyTwoSaber,
         bool secretDifficulty,
@@ -487,6 +609,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
             secretDifficulty,
             cancellationToken => SSEvaluationManager.FindMapsAsync(
                 _platformUserModel,
+                playedFilter,
                 starBuffer,
                 onlyTwoSaber,
                 mapDifficulty,
@@ -668,6 +791,20 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         finally
         {
             _mapDownloadInProgress = false;
+        }
+    }
+
+    internal bool IsMapInstalled(EvaluatedDifficulty selectedDifficulty)
+    {
+        try
+        {
+            return BetterSongSearchDownloadManager.IsMapInstalled(selectedDifficulty.Map);
+        }
+        catch (Exception exception)
+        {
+            Plugin.Log.Warn(
+                $"Could not check whether the roulette map is already installed: {exception.Message}");
+            return false;
         }
     }
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BeatSaberMarkupLanguage.Attributes;
 using BeatSaberMarkupLanguage.ViewControllers;
 using BeatLocator.Settings;
+using HMUI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -121,6 +122,8 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
             _difficultySelectionSliderImage,
             DifficultiesList.Count,
             _selectedDifficulty);
+        _difficultySegments.GetComponent<SegmentedControl>()
+            ?.SelectCellWithNumber(_selectedDifficulty);
 
         _balanceSelectionSlider =
             _balanceSelectionSliderImage.gameObject
@@ -130,6 +133,8 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
             _balanceSelectionSliderImage,
             BalancesList.Count,
             _selectedBalance);
+        _balanceSegments.GetComponent<SegmentedControl>()
+            ?.SelectCellWithNumber(_selectedBalance);
 
         _playedToggleVisual = CreateToggleVisual(
             _playedToggleButton,

@@ -74,6 +74,9 @@ internal sealed class RouletteLevelCompletionTracker : IInitializable, IDisposab
         if (results.levelEndStateType == LevelCompletionResults.LevelEndStateType.Failed)
         {
             Plugin.Log.Info($"[PP] Run {session.RunId}: LEVEL FAILED; no PP lookup will be performed.");
+            // Results are activated while gameplay time is still stopped. Use
+            // the synchronous vanilla fade so no failed-results frame renders.
+            _ = Menu.BeatLocatorFlowCoordinator.FadeOutActiveForPostLevelTransitionAsync();
             _uiState.CompleteTerminal(session, true);
             _sessionManager.Release(session.RunId);
             return;

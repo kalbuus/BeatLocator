@@ -87,6 +87,14 @@ jobs:
             throw "Built plugin was not found: $pluginPath"
           }
 
+          $dllFiles = @(Get-ChildItem -LiteralPath $sourceDirectory -Filter '*.dll' -File -Recurse)
+          $expectedPluginPath = [IO.Path]::GetFullPath($pluginPath)
+          if ($dllFiles.Count -ne 1 -or
+              [IO.Path]::GetFullPath($dllFiles[0].FullName) -ne $expectedPluginPath) {
+            $dllSummary = ($dllFiles | ForEach-Object FullName) -join ', '
+            throw "Release artifact must contain only Plugins\BeatLocator.dll; found: $dllSummary"
+          }
+
           Compress-Archive `
             -Path (Join-Path $sourceDirectory 'Plugins') `
             -DestinationPath $packagePath `

@@ -61,6 +61,8 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     private RectTransform _songDifficulty = null!;
     [UIComponent("song-actions")]
     private RectTransform _songActions = null!;
+    [UIComponent("menu-button")]
+    private Button _menuButton = null!;
     [UIComponent("skip-button")]
     private Button _skipButton = null!;
     [UIComponent("primary-button")]
@@ -79,7 +81,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     [UIValue("songDifficultyText")]
     public string SongDifficultyText { get; private set; } = "UNKNOWN  •  0.00 ★";
     [UIValue("primaryButtonText")]
-    public string PrimaryButtonText { get; private set; } = "DOWNLOAD";
+    public string PrimaryButtonText { get; private set; } = "PLAY";
 
     private readonly List<ImageView> _dummyCovers = new List<ImageView>();
     private BeatLocatorFlowCoordinator _flowCoordinator = null!;
@@ -168,8 +170,11 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         SongMapperText =
             $"Mapped by {ValueOrFallback(selectedDifficulty.Map.Mapper, "unknown mapper")}";
         SongDifficultyText = FormatDifficulty(selectedDifficulty);
-        PrimaryButtonText = "DOWNLOAD";
-        _primaryButtonState = PrimaryButtonState.Download;
+        var mapInstalled = _flowCoordinator.IsMapInstalled(selectedDifficulty);
+        PrimaryButtonText = "PLAY";
+        _primaryButtonState = mapInstalled
+            ? PrimaryButtonState.Play
+            : PrimaryButtonState.Download;
 
         NotifyPropertyChanged(nameof(SongTitleText));
         NotifyPropertyChanged(nameof(SongSubNameText));
@@ -231,8 +236,8 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         StopAnimations();
     }
 
-    [UIAction("skipPressed")]
-    private void OnSkipPressed()
+    [UIAction("menuPressed")]
+    private void OnMenuPressed()
     {
         if (_primaryButtonState == PrimaryButtonState.Downloading ||
             _primaryButtonState == PrimaryButtonState.Starting)
@@ -243,6 +248,18 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         _flowCoordinator.ShowRankingSelect();
     }
 
+    [UIAction("skipPressed")]
+    private void OnSkipPressed()
+    {
+        if (_primaryButtonState == PrimaryButtonState.Downloading ||
+            _primaryButtonState == PrimaryButtonState.Starting)
+        {
+            return;
+        }
+
+        _flowCoordinator.StartNextRoulette();
+    }
+
     [UIAction("primaryPressed")]
     private async void OnPrimaryPressed()
     {
@@ -251,8 +268,9 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         {
             var playRunId = _runId;
             _primaryButtonState = PrimaryButtonState.Starting;
-            SetPrimaryButtonText("STARTING");
+            SetPrimaryButtonText("PLAY");
             _primaryButton.interactable = false;
+            _menuButton.interactable = false;
             _skipButton.interactable = false;
             StopPreviewPlayback();
 
@@ -262,6 +280,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
                 _primaryButtonState = PrimaryButtonState.Play;
                 SetPrimaryButtonText("PLAY");
                 _primaryButton.interactable = true;
+                _menuButton.interactable = true;
                 _skipButton.interactable = true;
             }
             return;
@@ -276,8 +295,9 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
 
         var runId = _runId;
         _primaryButtonState = PrimaryButtonState.Downloading;
-        SetPrimaryButtonText("INSTALLING");
+        SetPrimaryButtonText("PLAY");
         _primaryButton.interactable = false;
+        _menuButton.interactable = false;
         _skipButton.interactable = false;
         StopPreviewPlayback();
 
@@ -287,16 +307,23 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         if (outcome == MapDownloadOutcome.Installed ||
             outcome == MapDownloadOutcome.AlreadyInstalled)
         {
-            _primaryButtonState = PrimaryButtonState.Play;
+            _primaryButtonState = PrimaryButtonState.Starting;
             SetPrimaryButtonText("PLAY");
-            _primaryButton.interactable = true;
-            _skipButton.interactable = true;
+            var started = await _flowCoordinator.PlayMapAsync(_selectedDifficulty);
+            if (!started && runId == _runId)
+            {
+                _primaryButtonState = PrimaryButtonState.Play;
+                _primaryButton.interactable = true;
+                _menuButton.interactable = true;
+                _skipButton.interactable = true;
+            }
             return;
         }
 
         _primaryButtonState = PrimaryButtonState.Download;
-        SetPrimaryButtonText("RETRY");
+        SetPrimaryButtonText("PLAY");
         _primaryButton.interactable = true;
+        _menuButton.interactable = true;
         _skipButton.interactable = true;
     }
 
@@ -787,7 +814,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     {
         using var downloadHandler = new DownloadHandlerTexture();
         using var request = UnityWebRequest.Get(coverUrl);
-        request.SetRequestHeader("User-Agent", "BeatLocator/0.0.1");
+        request.SetRequestHeader("User-Agent", "BeatLocator/0.0.2");
         request.timeout = CoverRequestTimeoutSeconds;
         request.downloadHandler = downloadHandler;
         request.disposeDownloadHandlerOnDispose = false;
@@ -1085,6 +1112,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         _viewportBackground.enabled = true;
         _viewportBackground.color = _viewportBackgroundColor;
         _songDetails.gameObject.SetActive(false);
+        _menuButton.interactable = false;
         _skipButton.interactable = false;
         _primaryButton.interactable = false;
 
@@ -1205,6 +1233,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         _previewHoverHandler.enabled = previewAvailable;
         _previewOverlayCanvasGroup.alpha = 0f;
         _songDetails.gameObject.SetActive(true);
+        _menuButton.interactable = true;
         _skipButton.interactable = true;
         _primaryButton.interactable = true;
         Canvas.ForceUpdateCanvases();
@@ -1319,7 +1348,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
                          ?? throw new InvalidOperationException(
                              "The ranking service did not provide a valid map hash for preview playback.");
         using var request = UnityWebRequestMultimedia.GetAudioClip(previewUrl, AudioType.MPEG);
-        request.SetRequestHeader("User-Agent", "BeatLocator/0.0.1");
+        request.SetRequestHeader("User-Agent", "BeatLocator/0.0.2");
         var operation = request.SendWebRequest();
 
         while (!operation.isDone)

@@ -1,5 +1,12 @@
 namespace BeatLocator.Settings;
 
+internal enum ScoreSaberPlayedFilter
+{
+    Any = 0,
+    Played = 1,
+    New = 2
+}
+
 /// <summary>
 /// Provider-neutral access to the shared ranking search preferences. The
 /// underlying legacy property names remain unchanged for config compatibility.
@@ -69,6 +76,25 @@ internal sealed class RankingSearchPreferences
             if (_config.BeatLeaderSecretDifficultyEnabled != value)
             {
                 _config.BeatLeaderSecretDifficultyEnabled = value;
+            }
+        }
+    }
+
+    internal ScoreSaberPlayedFilter ScoreSaberPlayedSelection
+    {
+        get
+        {
+            var value = _config.ScoreSaberPlayedSelection;
+            return value >= (int)ScoreSaberPlayedFilter.Any &&
+                   value <= (int)ScoreSaberPlayedFilter.New
+                ? (ScoreSaberPlayedFilter)value
+                : ScoreSaberPlayedFilter.Any;
+        }
+        set
+        {
+            if (_config.ScoreSaberPlayedSelection != (int)value)
+            {
+                _config.ScoreSaberPlayedSelection = (int)value;
             }
         }
     }

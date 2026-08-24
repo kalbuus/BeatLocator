@@ -14,11 +14,14 @@ internal sealed class RoulettePlaySessionManager
     private long _nextRunId;
     private RoulettePlaySession? _current;
 
+    internal static RoulettePlaySessionManager? Instance { get; private set; }
+
     public RoulettePlaySessionManager(
         PostLevelPpResolver ppResolver,
         BeatLeaderUploadObserver beatLeaderUploadObserver,
         PostLevelUiState uiState)
     {
+        Instance = this;
         _ppResolver = ppResolver;
         _beatLeaderUploadObserver = beatLeaderUploadObserver;
         _uiState = uiState;
@@ -84,6 +87,16 @@ internal sealed class RoulettePlaySessionManager
         lock (_sync)
         {
             return _current != null && KeysMatch(_current.BeatmapKey, beatmapKey);
+        }
+    }
+
+    internal bool HasActiveRun()
+    {
+        lock (_sync)
+        {
+            return _current != null &&
+                   !_current.CompletionClaimed &&
+                   DateTimeOffset.UtcNow - _current.LaunchedAt <= MaximumSessionAge;
         }
     }
 

@@ -32,7 +32,7 @@
     <Authors>kalbuus</Authors>
     <Version>0.0.2</Version>
     <GameVersion>$(BeatSaberVersion)</GameVersion>
-    <Description>Mod for finding what maps to play</Description>
+    <Description>Finds ranked Beat Saber maps that match your BeatLeader or ScoreSaber profile.</Description>
     <!--<PluginIcon></PluginIcon>-->
     <ProjectSource>https://github.com/kalbuus/BeatLocator</ProjectSource>
     <!--<ProjectHome></ProjectHome>-->

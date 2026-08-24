@@ -44,9 +44,29 @@ if (-not (Test-Path -LiteralPath $sourceArtifactDirectory)) {
     throw "Expected build artifact was not found: $sourceArtifactDirectory"
 }
 
+$resolvedRepositoryPrefix = [IO.Path]::GetFullPath($repositoryRoot).TrimEnd('\') + '\'
+$resolvedDestinationArtifactDirectory = [IO.Path]::GetFullPath($destinationArtifactDirectory)
+if (-not $resolvedDestinationArtifactDirectory.StartsWith(
+        $resolvedRepositoryPrefix,
+        [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to clean an artifact directory outside the repository: " +
+          $resolvedDestinationArtifactDirectory
+}
+if (Test-Path -LiteralPath $resolvedDestinationArtifactDirectory) {
+    Remove-Item -LiteralPath $resolvedDestinationArtifactDirectory -Recurse -Force
+}
 New-Item -ItemType Directory -Path $destinationArtifactDirectory -Force | Out-Null
 Copy-Item -Path (Join-Path $sourceArtifactDirectory '*') -Destination $destinationArtifactDirectory -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $sourceDirectory 'BeatLocator.manifest') -Destination $destinationDirectory -Force
+
+$binaryPath = Join-Path $destinationArtifactDirectory 'Plugins\BeatLocator.dll'
+$dllFiles = @(Get-ChildItem -LiteralPath $destinationArtifactDirectory -Filter '*.dll' -File -Recurse)
+$expectedBinaryPath = [IO.Path]::GetFullPath($binaryPath)
+if ($dllFiles.Count -ne 1 -or
+    [IO.Path]::GetFullPath($dllFiles[0].FullName) -ne $expectedBinaryPath) {
+    $dllSummary = ($dllFiles | ForEach-Object FullName) -join ', '
+    throw "Release artifact must contain only Plugins\BeatLocator.dll; found: $dllSummary"
+}
 
 $zipPath = Join-Path $destinationDirectory 'BeatLocator-1.40.2-1.40.8.zip'
 if (Test-Path -LiteralPath $zipPath) {
@@ -54,7 +74,6 @@ if (Test-Path -LiteralPath $zipPath) {
 }
 Compress-Archive -Path (Join-Path $destinationArtifactDirectory '*') -DestinationPath $zipPath -CompressionLevel Optimal
 
-$binaryPath = Join-Path $destinationArtifactDirectory 'Plugins\BeatLocator.dll'
 $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $binaryPath
 Write-Host "Unified artifact: $binaryPath"
 Write-Host "Unified ZIP: $zipPath"

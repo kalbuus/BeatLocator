@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BeatSaberMarkupLanguage.Attributes;
 using BeatSaberMarkupLanguage.ViewControllers;
 using BeatLocator.Settings;
+using HMUI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -28,6 +29,10 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
     private readonly RectTransform _difficultySegments = null!;
     [UIComponent("difficulty-selection-slider")]
     private readonly Image _difficultySelectionSliderImage = null!;
+    [UIComponent("played-segments")]
+    private readonly RectTransform _playedSegments = null!;
+    [UIComponent("played-selection-slider")]
+    private readonly Image _playedSelectionSliderImage = null!;
     [UIComponent("find-button")]
     private readonly Button _findButton = null!;
 
@@ -36,10 +41,12 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
     private Sprite? _nineSliceSprite;
     private Sprite? _exitIconSprite;
     private int _selectedDifficulty;
+    private int _selectedPlayedFilter;
     private bool _twoSaberEnabled;
     private bool _secretEnabled;
     private bool _searchInProgress;
     private SegmentSelectionSlider? _difficultySelectionSlider;
+    private SegmentSelectionSlider? _playedSelectionSlider;
     private ToggleButtonVisual? _twoSaberToggleVisual;
     private ToggleButtonVisual? _secretToggleVisual;
 
@@ -49,6 +56,14 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
     [UIValue("difficulties")]
     public List<string> DifficultiesList { get; set; } =
         RankingSelectViewSupport.CreateDifficulties();
+
+    [UIValue("playedFilters")]
+    public List<string> PlayedFiltersList { get; set; } = new List<string>
+    {
+        "Doesn't matter",
+        "Played",
+        "New"
+    };
 
     [Inject]
     private void Construct(
@@ -60,9 +75,13 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
         _selectedDifficulty = RankingSelectViewSupport.NormalizeSelection(
             preferences.DifficultySelection,
             DifficultiesList.Count);
+        _selectedPlayedFilter = RankingSelectViewSupport.NormalizeSelection(
+            (int)preferences.ScoreSaberPlayedSelection,
+            PlayedFiltersList.Count);
         _twoSaberEnabled = preferences.TwoSaberEnabled;
         _secretEnabled = preferences.SecretDifficultyEnabled;
         preferences.DifficultySelection = _selectedDifficulty;
+        preferences.ScoreSaberPlayedSelection = (ScoreSaberPlayedFilter)_selectedPlayedFilter;
     }
 
     [UIAction("#post-parse")]
@@ -73,6 +92,7 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
         _exitIconSprite ??= RankingSelectViewSupport.LoadSprite(
             RankingSelectViewSupport.ExitIconResource);
         _difficultySelectionSliderImage.sprite = _nineSliceSprite;
+        _playedSelectionSliderImage.sprite = _nineSliceSprite;
 
         var exitVisual = _exitButton.gameObject.AddComponent<ExitButtonVisual>();
         exitVisual.Initialize(
@@ -89,6 +109,19 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
             _difficultySelectionSliderImage,
             DifficultiesList.Count,
             _selectedDifficulty);
+        _difficultySegments.GetComponent<SegmentedControl>()
+            ?.SelectCellWithNumber(_selectedDifficulty);
+
+        _playedSelectionSlider =
+            _playedSelectionSliderImage.gameObject
+                .AddComponent<SegmentSelectionSlider>();
+        _playedSelectionSlider.Initialize(
+            _playedSegments,
+            _playedSelectionSliderImage,
+            PlayedFiltersList.Count,
+            _selectedPlayedFilter);
+        _playedSegments.GetComponent<SegmentedControl>()
+            ?.SelectCellWithNumber(_selectedPlayedFilter);
 
         _twoSaberToggleVisual = CreateToggleVisual(
             _twoSaberToggleButton,
@@ -110,11 +143,23 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
         _difficultySelectionSlider?.MoveTo(_selectedDifficulty);
     }
 
+    [UIAction("playedFilterSelected")]
+    private void OnPlayedFilterSelected(object segmentedControl, int index)
+    {
+        _selectedPlayedFilter = RankingSelectViewSupport.NormalizeSelection(
+            index,
+            PlayedFiltersList.Count);
+        _preferences.ScoreSaberPlayedSelection =
+            (ScoreSaberPlayedFilter)_selectedPlayedFilter;
+        _playedSelectionSlider?.MoveTo(_selectedPlayedFilter);
+    }
+
     [UIAction("find-btn-action")]
     private void OnFindPressed()
     {
         SetSearchInProgress(true);
         _flowCoordinator.FindScoreSaberMapAsync(
+            (ScoreSaberPlayedFilter)_selectedPlayedFilter,
             RankingSelectViewSupport.StarBuffer,
             _twoSaberEnabled,
             _secretEnabled,

@@ -1,6 +1,6 @@
 <vertical id="pp-root"
           ignore-layout="true"
-          anchor-pos-y="8"
+          anchor-pos-y="-8"
           child-control-width="true"
           child-control-height="true"
           child-expand-width="false"

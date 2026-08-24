@@ -39,7 +39,30 @@ internal sealed class PostLevelUiState
     private PostLevelTerminalResult? _terminalResult;
     private bool _terminalTaken;
 
+    internal static PostLevelUiState? Instance { get; private set; }
+
+    public PostLevelUiState()
+    {
+        Instance = this;
+    }
+
     internal event Action? ReadyChanged;
+
+    internal bool ShouldInterceptVanillaContinue()
+    {
+        lock (_sync)
+        {
+            return _activeRunId != 0 && !_taken;
+        }
+    }
+
+    internal bool HasFailedTerminalForActiveRun()
+    {
+        lock (_sync)
+        {
+            return _activeRunId != 0 && _terminalResult?.LevelFailed == true;
+        }
+    }
 
     internal void Begin(long runId, RankingProvider provider)
     {
@@ -149,6 +172,25 @@ internal sealed class PostLevelUiState
         {
             if (_activeRunId == 0 ||
                 _terminalResult == null ||
+                _terminalTaken)
+            {
+                result = null;
+                return false;
+            }
+
+            _terminalTaken = true;
+            result = _terminalResult;
+            return true;
+        }
+    }
+
+    internal bool TryTakeQuitTerminal(out PostLevelTerminalResult? result)
+    {
+        lock (_sync)
+        {
+            if (_activeRunId == 0 ||
+                _terminalResult == null ||
+                _terminalResult.LevelFailed ||
                 _terminalTaken)
             {
                 result = null;

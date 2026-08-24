@@ -33,9 +33,10 @@
             <text id="song-author" text="~songAuthorText" align="Left" font-size="3.2" preferred-height="4.5" />
             <text id="song-mapper" text="~songMapperText" align="Left" font-size="3.2" preferred-height="4.5" />
             <text id="song-difficulty" text="~songDifficultyText" align="Left" font-size="3.2" preferred-height="7" />
-            <horizontal id="song-actions" spacing="2" horizontal-fit="PreferredSize" vertical-fit="PreferredSize">
-                <button id="skip-button" text="SKIP" on-click="skipPressed" preferred-width="28" preferred-height="7" />
-                <action-button id="primary-button" text="~primaryButtonText" on-click="primaryPressed" preferred-width="28" preferred-height="7" />
+            <horizontal id="song-actions" spacing="1.5" horizontal-fit="PreferredSize" vertical-fit="PreferredSize">
+                <button id="menu-button" text="MENU" on-click="menuPressed" preferred-width="19" preferred-height="7" />
+                <button id="skip-button" text="SKIP" on-click="skipPressed" preferred-width="19" preferred-height="7" />
+                <action-button id="primary-button" text="~primaryButtonText" on-click="primaryPressed" preferred-width="19" preferred-height="7" />
             </horizontal>
         </vertical>
     </horizontal>

@@ -26,7 +26,7 @@ internal static class BetterSongSearchDownloadManager
         CancellationToken cancellationToken)
     {
         var hash = GetMapHash(map);
-        if (IsMapInstalled(hash))
+        if (IsMapHashInstalled(hash))
         {
             return false;
         }
@@ -93,6 +93,11 @@ internal static class BetterSongSearchDownloadManager
             "The ranking service did not provide a valid map SHA-1 hash or download URL.");
     }
 
+    internal static bool IsMapInstalled(RecommendationMap map)
+    {
+        return IsMapHashInstalled(GetMapHash(map));
+    }
+
     private static string ExtractMapHash(string downloadUrl)
     {
         if (!Uri.TryCreate(downloadUrl, UriKind.Absolute, out var uri))
@@ -132,7 +137,7 @@ internal static class BetterSongSearchDownloadManager
         field.SetValue(instance, value);
     }
 
-    private static bool IsMapInstalled(string hash)
+    private static bool IsMapHashInstalled(string hash)
     {
         var songCore = PluginManager.GetPluginFromId(SongCorePluginId)
             ?? throw new InvalidOperationException("SongCore is not installed.");

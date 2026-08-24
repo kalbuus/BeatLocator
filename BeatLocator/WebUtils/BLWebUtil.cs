@@ -18,6 +18,7 @@ internal static class BLWebUtil
 {
     private const int AuthenticatedRequestTimeoutMilliseconds = 40000;
     private const int PpSettlementTimeoutSeconds = 60;
+    private const int ZeroScorePpConfirmationSeconds = 2;
     private const int ZeroPpSettlementWindowSeconds = 30;
     private const int ProfileFallbackGraceSeconds = 10;
     private const float MinimumRankedStars = 1f;
@@ -391,6 +392,21 @@ internal static class BLWebUtil
                     Plugin.Log.Info(
                         $"[PP] BeatLeader score {score.Id} is visible; waiting for profile PP settlement.");
                 }
+
+                // A No Fail run can still be reported by Beat Saber as Cleared after the
+                // energy bar was depleted. BeatLeader publishes that score, but assigns it
+                // zero PP. In that case no profile settlement can arrive, so do not leave
+                // the result screen waiting for the generic zero-gain timeout.
+                if (score.Pp <= 0.000001d &&
+                    DateTimeOffset.UtcNow - scoreFirstSeenAt.Value >=
+                    TimeSpan.FromSeconds(ZeroScorePpConfirmationSeconds))
+                {
+                    return CreateBeatLeaderPpResult(
+                        score,
+                        0d,
+                        "BeatLeader confirmed zero score PP; no profile settlement is expected");
+                }
+
                 var reportedProfileGain = score.ScoreImprovement?.TotalPp;
                 if (reportedProfileGain.HasValue &&
                     Math.Abs(reportedProfileGain.Value) > 0.000001d)

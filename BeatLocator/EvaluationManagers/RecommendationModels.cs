@@ -82,4 +82,10 @@ internal sealed class RecommendationDifficulty
 
     [JsonProperty("techRating")]
     public float? TechRating { get; set; }
+
+    [JsonIgnore]
+    public int? ProviderDifficultyId { get; set; }
+
+    [JsonIgnore]
+    public int? RealmId { get; set; }
 }

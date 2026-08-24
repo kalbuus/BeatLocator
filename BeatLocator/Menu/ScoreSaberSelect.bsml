@@ -41,14 +41,7 @@
                preserve-aspect="true" />
     </button>
 
-    <vertical horizontal-fit="PreferredSize"
-              vertical-fit="PreferredSize"
-              child-control-height="false"
-              child-expand-height="false"
-              child-expand-width="false"
-              child-align="UpperCenter"
-              spacing="0">
-        <horizontal pad="2"
+    <horizontal pad="2"
                     preferred-width="100"
                     preferred-height="11"
                     child-control-width="true"
@@ -58,11 +51,21 @@
             <text-segments id="difficulty-segments" data="difficulties" select-cell="difficultySelected" size-delta-y="7" />
             <image id="difficulty-selection-slider"
                    ignore-layout="true" />
-        </horizontal>
+    </horizontal>
 
-        <horizontal preferred-width="1" preferred-height="2" />
+    <horizontal pad="2"
+                    preferred-width="100"
+                    preferred-height="11"
+                    child-control-width="true"
+                    child-control-height="true"
+                    child-align="MiddleCenter">
+            <text align="Left" text="Played By Me" color="#9E9E9E" />
+            <text-segments id="played-segments" data="playedFilters" select-cell="playedFilterSelected" size-delta-y="7" />
+            <image id="played-selection-slider"
+                   ignore-layout="true" />
+    </horizontal>
 
-        <horizontal preferred-width="100"
+    <horizontal preferred-width="100"
                     preferred-height="7"
                     child-control-width="false"
                     child-control-height="false"
@@ -96,8 +99,7 @@
                       font-size="3.1"
                       word-wrap="false" />
             </button>
-        </horizontal>
-    </vertical>
+    </horizontal>
 
     <action-button id="find-button"
                    text="~findButtonText"

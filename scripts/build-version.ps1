@@ -83,5 +83,17 @@ if ($null -ne $frameworkReferenceDirectory) {
     $arguments += "-p:FrameworkPathOverride=$frameworkReferenceDirectory"
 }
 
+$artifactDirectory = Join-Path $repositoryRoot "BeatLocator\bin\$Configuration\$GameVersion\net472\Artifact"
+$resolvedRepositoryPrefix = [IO.Path]::GetFullPath($repositoryRoot).TrimEnd('\') + '\'
+$resolvedArtifactDirectory = [IO.Path]::GetFullPath($artifactDirectory)
+if (-not $resolvedArtifactDirectory.StartsWith(
+        $resolvedRepositoryPrefix,
+        [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to clean an artifact directory outside the repository: $resolvedArtifactDirectory"
+}
+if (Test-Path -LiteralPath $resolvedArtifactDirectory) {
+    Remove-Item -LiteralPath $resolvedArtifactDirectory -Recurse -Force
+}
+
 & dotnet @arguments
 exit $LASTEXITCODE

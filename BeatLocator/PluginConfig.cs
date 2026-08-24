@@ -36,6 +36,8 @@ internal class PluginConfig
 
     public virtual bool BeatLeaderSecretDifficultyEnabled { get; set; } = false;
 
+    public virtual int ScoreSaberPlayedSelection { get; set; } = 0;
+
     /*
     /// <summary>
     /// This is called whenever BSIPA reads the config from disk (including when file changes are detected).

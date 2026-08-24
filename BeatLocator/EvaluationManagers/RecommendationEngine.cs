@@ -43,6 +43,51 @@ internal static class RecommendationEngine
         float expectedStars,
         PluginConfig config);
 
+    internal delegate Task<CandidateFilterResult> CandidateFilter(
+        EvaluatedDifficulty difficulty,
+        CancellationToken cancellationToken);
+
+    internal readonly struct CandidateFilterResult
+    {
+        private CandidateFilterResult(bool accepted, string? failureReason)
+        {
+            Accepted = accepted;
+            FailureReason = failureReason;
+        }
+
+        internal bool Accepted { get; }
+        internal string? FailureReason { get; }
+
+        internal static CandidateFilterResult Accept()
+        {
+            return new CandidateFilterResult(true, null);
+        }
+
+        internal static CandidateFilterResult Reject()
+        {
+            return new CandidateFilterResult(false, null);
+        }
+
+        internal static CandidateFilterResult Failure(string reason)
+        {
+            return new CandidateFilterResult(false, reason);
+        }
+    }
+
+    private readonly struct CandidateSelectionResult
+    {
+        internal CandidateSelectionResult(
+            EvaluatedDifficulty? difficulty,
+            string? failureReason)
+        {
+            Difficulty = difficulty;
+            FailureReason = failureReason;
+        }
+
+        internal EvaluatedDifficulty? Difficulty { get; }
+        internal string? FailureReason { get; }
+    }
+
     internal readonly struct PlaySample
     {
         internal PlaySample(float stars, float accuracy, float weight)
@@ -140,6 +185,7 @@ internal static class RecommendationEngine
         ScoreLoader loadScoresAsync,
         MapLoader loadMapsAsync,
         DifficultyScorer scoreDifficulty,
+        CandidateFilter? filterCandidateAsync,
         CancellationToken cancellationToken = default)
     {
         var profileResult = await GetDifficultyRangeAsync(
@@ -202,7 +248,16 @@ internal static class RecommendationEngine
                 expectedStars,
                 config,
                 scoreDifficulty);
-            var selectedDifficulty = SelectRandomDifficulty(evaluatedDifficulties);
+            var selectionResult = await SelectRandomDifficultyAsync(
+                evaluatedDifficulties,
+                filterCandidateAsync,
+                cancellationToken);
+            if (selectionResult.FailureReason != null)
+            {
+                return MapSearchResult.Failure(selectionResult.FailureReason);
+            }
+
+            var selectedDifficulty = selectionResult.Difficulty;
             if (selectedDifficulty != null)
             {
                 AddToSessionHistory(selectedDifficulty.Map);
@@ -531,6 +586,45 @@ internal static class RecommendationEngine
         }
 
         return lastEligibleDifficulty;
+    }
+
+    private static async Task<CandidateSelectionResult> SelectRandomDifficultyAsync(
+        IEnumerable<EvaluatedDifficulty> difficulties,
+        CandidateFilter? filterCandidateAsync,
+        CancellationToken cancellationToken)
+    {
+        var remaining = difficulties
+            .Where(difficulty => IsValidWeight(difficulty.Score))
+            .ToList();
+        while (remaining.Count > 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var candidate = SelectRandomDifficulty(remaining);
+            if (candidate == null)
+            {
+                break;
+            }
+
+            if (filterCandidateAsync == null)
+            {
+                return new CandidateSelectionResult(candidate, null);
+            }
+
+            var filterResult = await filterCandidateAsync(candidate, cancellationToken);
+            if (filterResult.FailureReason != null)
+            {
+                return new CandidateSelectionResult(null, filterResult.FailureReason);
+            }
+
+            if (filterResult.Accepted)
+            {
+                return new CandidateSelectionResult(candidate, null);
+            }
+
+            remaining.Remove(candidate);
+        }
+
+        return new CandidateSelectionResult(null, null);
     }
 
     private static void LogSelection(EvaluatedDifficulty selectedDifficulty)

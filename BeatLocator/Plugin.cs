@@ -7,6 +7,7 @@ using System;
 using System.Net.Http;
 using System.Threading.Tasks;
 using BeatLocator.WebUtils;
+using HarmonyLib;
 using IpaLogger = IPA.Logging.Logger;
 using IpaConfig = IPA.Config.Config;
 
@@ -15,6 +16,7 @@ namespace BeatLocator;
 [Plugin(RuntimeOptions.DynamicInit), NoEnableDisable]
 internal class Plugin
 {
+    private const string HarmonyId = "com.kalbuus.beatlocator";
 
     internal static IpaLogger Log { get; private set; } = null!;
 
@@ -26,6 +28,15 @@ internal class Plugin
     {
         Log = ipaLogger;
         zenjector.UseLogger(Log);
+
+        try
+        {
+            new Harmony(HarmonyId).PatchAll(typeof(Plugin).Assembly);
+        }
+        catch (Exception exception)
+        {
+            Log.Error($"Could not install BeatLocator runtime patches: {exception}");
+        }
 
         // Creates an instance of PluginConfig used by IPA to load and store config values
         var pluginConfig = ipaConfig.Generated<PluginConfig>();
