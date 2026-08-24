@@ -232,16 +232,44 @@ internal static class BLWebUtil
         string uri,
         CancellationToken cancellationToken)
     {
-        const string networkingUtilsTypeName = "BeatLeader.API.NetworkingUtils";
         const string rawGetDescriptorTypeName = "BeatLeader.API.RequestDescriptors.RawGetRequestDescriptor";
-        const string simpleRequestMethodName = "SimpleRequestCoroutine";
+        const string rawDataRequestTypeName = "BeatLeader.API.RawDataRequest";
 
         var beatLeader = PluginManager.GetPluginFromId("BeatLeader")
             ?? throw new InvalidOperationException("BeatLeader is not installed.");
-        var networkingUtilsType = beatLeader.Assembly.GetType(networkingUtilsTypeName)
+        var rawGetDescriptorType = beatLeader.Assembly.GetType(rawGetDescriptorTypeName);
+        if (rawGetDescriptorType != null)
+        {
+            return await SendLegacyAuthenticatedBeatLeaderRequestAsync(
+                    uri,
+                    beatLeader.Assembly,
+                    rawGetDescriptorType,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var rawDataRequestType = beatLeader.Assembly.GetType(rawDataRequestTypeName)
+            ?? throw new MissingMemberException(
+                $"Neither {rawGetDescriptorTypeName} nor {rawDataRequestTypeName} " +
+                "is available in the installed BeatLeader version.");
+        return await SendRawDataBeatLeaderRequestAsync(
+                uri,
+                rawDataRequestType,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<string> SendLegacyAuthenticatedBeatLeaderRequestAsync(
+        string uri,
+        Assembly beatLeaderAssembly,
+        Type rawGetDescriptorType,
+        CancellationToken cancellationToken)
+    {
+        const string networkingUtilsTypeName = "BeatLeader.API.NetworkingUtils";
+        const string simpleRequestMethodName = "SimpleRequestCoroutine";
+
+        var networkingUtilsType = beatLeaderAssembly.GetType(networkingUtilsTypeName)
             ?? throw new MissingMemberException(networkingUtilsTypeName);
-        var rawGetDescriptorType = beatLeader.Assembly.GetType(rawGetDescriptorTypeName)
-            ?? throw new MissingMemberException(rawGetDescriptorTypeName);
         var descriptor = Activator.CreateInstance(rawGetDescriptorType, uri)
             ?? throw new InvalidOperationException("Could not create BeatLeader's request descriptor.");
         var simpleRequestMethod = Array.Find(
@@ -293,6 +321,86 @@ internal static class BLWebUtil
             throw new TimeoutException(
                 "BeatLeader did not complete the authenticated request within 40 seconds.");
         }
+    }
+
+    private static async Task<string> SendRawDataBeatLeaderRequestAsync(
+        string uri,
+        Type rawDataRequestType,
+        CancellationToken cancellationToken)
+    {
+        var sendMethod = rawDataRequestType.GetMethod(
+            "Send",
+            BindingFlags.Public | BindingFlags.Static,
+            null,
+            new[] { typeof(string), typeof(CancellationToken) },
+            null)
+            ?? throw new MissingMethodException(rawDataRequestType.FullName, "Send");
+
+        using var timeoutSource =
+            new CancellationTokenSource(AuthenticatedRequestTimeoutMilliseconds);
+        using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            timeoutSource.Token);
+
+        Plugin.Log.Debug("Using BeatLeader RawDataRequest compatibility path.");
+        var request = sendMethod.Invoke(
+                          null,
+                          new object[] { uri, linkedSource.Token })
+                      ?? throw new InvalidOperationException(
+                          "BeatLeader RawDataRequest returned no request object.");
+        var requestType = request.GetType();
+        var joinMethod = requestType.GetMethod(
+                             "Join",
+                             BindingFlags.Public | BindingFlags.Instance)
+                         ?? throw new MissingMethodException(requestType.FullName, "Join");
+        var joinTask = joinMethod.Invoke(request, null) as Task
+                       ?? throw new InvalidOperationException(
+                           "BeatLeader RawDataRequest returned an unexpected Join task.");
+
+        try
+        {
+            await joinTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (
+            timeoutSource.IsCancellationRequested &&
+            !cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                "BeatLeader did not complete the authenticated request within 40 seconds.");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (timeoutSource.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                "BeatLeader did not complete the authenticated request within 40 seconds.");
+        }
+
+        var requestState = requestType.GetProperty(
+                "RequestState",
+                BindingFlags.Public | BindingFlags.Instance)
+            ?.GetValue(request)
+            ?.ToString();
+        if (!string.Equals(requestState, "Finished", StringComparison.Ordinal))
+        {
+            var failReason = requestType.GetProperty(
+                    "FailReason",
+                    BindingFlags.Public | BindingFlags.Instance)
+                ?.GetValue(request) as string;
+            throw new InvalidOperationException(
+                "BeatLeader authorization/request failed: " +
+                (string.IsNullOrWhiteSpace(failReason)
+                    ? requestState ?? "unknown request state"
+                    : failReason));
+        }
+
+        var responseBytes = requestType.GetProperty(
+                "Result",
+                BindingFlags.Public | BindingFlags.Instance)
+            ?.GetValue(request) as byte[]
+            ?? throw new InvalidOperationException(
+                "BeatLeader RawDataRequest completed without response data.");
+        return System.Text.Encoding.UTF8.GetString(responseBytes);
     }
 
     internal static async Task<ProviderPpBaseline?> CapturePpBaselineAsync(
