@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using BeatLocator.EvaluationManagers;
+using BeatLocator.Settings;
 using IPA.Loader;
 using IPA.Utilities.Async;
 using Newtonsoft.Json;
@@ -129,8 +130,8 @@ internal static class BLWebUtil
         bool onlyTwoSaber,
         int mapBalance,
         int mapDifficulty,
+        SongDurationFilter durationFilter,
         int count,
-        PluginConfig config,
         CancellationToken cancellationToken = default)
     {
         try
@@ -166,11 +167,12 @@ internal static class BLWebUtil
                 
             };
             if (modeSetting != null) query.Add(modeSetting);
-            if (config.RecommendationsDurationEnabled)
-            {
-                query.Add($"duration_from={Math.Max(config.MinimumRecommendedSongDurationSeconds - 60, 0)}");
-                query.Add($"duration_to={Math.Min(config.MaximumRecommendedSongDurationSeconds + 60, 600)}");
-            }
+            var minimumDuration = durationFilter.GetMinimumSeconds();
+            var maximumDuration = durationFilter.GetMaximumSeconds();
+            if (minimumDuration.HasValue)
+                query.Add($"duration_from={minimumDuration.Value}");
+            if (maximumDuration.HasValue)
+                query.Add($"duration_to={maximumDuration.Value}");
 
             var uri = GetBeatLeaderApiUrl() + "/maps?" + string.Join("&", query);
             

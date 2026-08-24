@@ -7,6 +7,54 @@ internal enum ScoreSaberPlayedFilter
     New = 2
 }
 
+internal enum SongDurationFilter
+{
+    Any = 0,
+    Short = 1,
+    Small = 2,
+    Normal = 3,
+    Long = 4
+}
+
+internal static class SongDurationFilterExtensions
+{
+    internal static int? GetMinimumSeconds(this SongDurationFilter filter)
+    {
+        return filter switch
+        {
+            SongDurationFilter.Short => 0,
+            SongDurationFilter.Small => 60,
+            SongDurationFilter.Normal => 120,
+            SongDurationFilter.Long => 240,
+            _ => null
+        };
+    }
+
+    internal static int? GetMaximumSeconds(this SongDurationFilter filter)
+    {
+        return filter switch
+        {
+            SongDurationFilter.Short => 60,
+            SongDurationFilter.Small => 150,
+            SongDurationFilter.Normal => 240,
+            _ => null
+        };
+    }
+
+    internal static bool Matches(this SongDurationFilter filter, int? durationSeconds)
+    {
+        if (filter == SongDurationFilter.Any) return true;
+        if (!durationSeconds.HasValue) return false;
+
+        var minimum = filter.GetMinimumSeconds();
+        var maximum = filter.GetMaximumSeconds();
+        if (!minimum.HasValue && !maximum.HasValue) return false;
+
+        return (!minimum.HasValue || durationSeconds.Value >= minimum.Value) &&
+               (!maximum.HasValue || durationSeconds.Value <= maximum.Value);
+    }
+}
+
 /// <summary>
 /// Provider-neutral access to the shared ranking search preferences. The
 /// underlying legacy property names remain unchanged for config compatibility.
@@ -76,6 +124,25 @@ internal sealed class RankingSearchPreferences
             if (_config.BeatLeaderSecretDifficultyEnabled != value)
             {
                 _config.BeatLeaderSecretDifficultyEnabled = value;
+            }
+        }
+    }
+
+    internal SongDurationFilter DurationSelection
+    {
+        get
+        {
+            var value = _config.DurationSelection;
+            return value >= (int)SongDurationFilter.Any &&
+                   value <= (int)SongDurationFilter.Long
+                ? (SongDurationFilter)value
+                : SongDurationFilter.Any;
+        }
+        set
+        {
+            if (_config.DurationSelection != (int)value)
+            {
+                _config.DurationSelection = (int)value;
             }
         }
     }

@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using BeatLocator.Settings;
 using BeatLocator.WebUtils;
 using UnityEngine;
 
@@ -9,7 +10,6 @@ namespace BeatLocator.EvaluationManagers;
 /// BeatLeader-specific recommendation pipeline. BeatLeader API filters and the
 /// pass/tech balance formula live here so they can evolve independently.
 /// </summary>
-// TODO song duration modifier
 internal static class BLEvaluationManager
 {
     internal static Task<MapSearchResult> FindMapsAsync(
@@ -18,6 +18,7 @@ internal static class BLEvaluationManager
         bool onlyTwoSaber,
         int mapBalance,
         int mapDifficulty,
+        SongDurationFilter durationFilter,
         int count,
         PluginConfig config,
         CancellationToken cancellationToken = default)
@@ -39,26 +40,22 @@ internal static class BLEvaluationManager
                     onlyTwoSaber,
                     mapBalance,
                     mapDifficulty,
+                    durationFilter,
                     count,
-                    config,
                     token),
-            scoreDifficulty: (map, difficulty, expectedStars, activeConfig) =>
+            scoreDifficulty: (map, difficulty, expectedStars, _) =>
                 CalculateDifficultyScore(
-                    map,
                     difficulty,
                     mapBalance,
-                    expectedStars,
-                    activeConfig),
+                    expectedStars),
             filterCandidateAsync: null,
             cancellationToken);
     }
 
     private static float CalculateDifficultyScore(
-        RecommendationMap map,
         RecommendationDifficulty difficulty,
         int mapBalance,
-        float expectedStars,
-        PluginConfig config)
+        float expectedStars)
     {
         var difficultyPoints = RecommendationEngine.CalculateDifficultyPoints(
             difficulty,
@@ -74,15 +71,7 @@ internal static class BLEvaluationManager
         var stylePoints = CalculateStylePoints(style, mapBalance);
         if (stylePoints == 0f) return 0f;
 
-        if (!config.RecommendationsDurationEnabled)
-        {
-            return 0.6f * stylePoints + 0.4f * difficultyPoints;
-        }
-
-        var durationPoints = RecommendationEngine.CalculateDurationPoints(map, config);
-        return 0.5f * stylePoints +
-               0.4f * difficultyPoints +
-               0.1f * durationPoints;
+        return 0.6f * stylePoints + 0.4f * difficultyPoints;
     }
 
     private static float CalculateStylePoints(float style, int mapBalance)

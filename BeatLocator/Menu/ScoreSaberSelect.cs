@@ -33,6 +33,10 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
     private readonly RectTransform _playedSegments = null!;
     [UIComponent("played-selection-slider")]
     private readonly Image _playedSelectionSliderImage = null!;
+    [UIComponent("duration-segments")]
+    private readonly RectTransform _durationSegments = null!;
+    [UIComponent("duration-selection-slider")]
+    private readonly Image _durationSelectionSliderImage = null!;
     [UIComponent("find-button")]
     private readonly Button _findButton = null!;
 
@@ -42,11 +46,13 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
     private Sprite? _exitIconSprite;
     private int _selectedDifficulty;
     private int _selectedPlayedFilter;
+    private int _selectedDuration;
     private bool _twoSaberEnabled;
     private bool _secretEnabled;
     private bool _searchInProgress;
     private SegmentSelectionSlider? _difficultySelectionSlider;
     private SegmentSelectionSlider? _playedSelectionSlider;
+    private SegmentSelectionSlider? _durationSelectionSlider;
     private ToggleButtonVisual? _twoSaberToggleVisual;
     private ToggleButtonVisual? _secretToggleVisual;
 
@@ -65,6 +71,10 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
         "New"
     };
 
+    [UIValue("durations")]
+    public List<string> DurationsList { get; set; } =
+        RankingSelectViewSupport.CreateDurations();
+
     [Inject]
     private void Construct(
         BeatLocatorFlowCoordinator flowCoordinator,
@@ -78,10 +88,14 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
         _selectedPlayedFilter = RankingSelectViewSupport.NormalizeSelection(
             (int)preferences.ScoreSaberPlayedSelection,
             PlayedFiltersList.Count);
+        _selectedDuration = RankingSelectViewSupport.NormalizeSelection(
+            (int)preferences.DurationSelection,
+            DurationsList.Count);
         _twoSaberEnabled = preferences.TwoSaberEnabled;
         _secretEnabled = preferences.SecretDifficultyEnabled;
         preferences.DifficultySelection = _selectedDifficulty;
         preferences.ScoreSaberPlayedSelection = (ScoreSaberPlayedFilter)_selectedPlayedFilter;
+        preferences.DurationSelection = (SongDurationFilter)_selectedDuration;
     }
 
     [UIAction("#post-parse")]
@@ -93,6 +107,7 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
             RankingSelectViewSupport.ExitIconResource);
         _difficultySelectionSliderImage.sprite = _nineSliceSprite;
         _playedSelectionSliderImage.sprite = _nineSliceSprite;
+        _durationSelectionSliderImage.sprite = _nineSliceSprite;
 
         var exitVisual = _exitButton.gameObject.AddComponent<ExitButtonVisual>();
         exitVisual.Initialize(
@@ -122,6 +137,17 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
             _selectedPlayedFilter);
         _playedSegments.GetComponent<SegmentedControl>()
             ?.SelectCellWithNumber(_selectedPlayedFilter);
+
+        _durationSelectionSlider =
+            _durationSelectionSliderImage.gameObject
+                .AddComponent<SegmentSelectionSlider>();
+        _durationSelectionSlider.Initialize(
+            _durationSegments,
+            _durationSelectionSliderImage,
+            DurationsList.Count,
+            _selectedDuration);
+        _durationSegments.GetComponent<SegmentedControl>()
+            ?.SelectCellWithNumber(_selectedDuration);
 
         _twoSaberToggleVisual = CreateToggleVisual(
             _twoSaberToggleButton,
@@ -154,6 +180,16 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
         _playedSelectionSlider?.MoveTo(_selectedPlayedFilter);
     }
 
+    [UIAction("durationSelected")]
+    private void OnDurationSelected(object segmentedControl, int index)
+    {
+        _selectedDuration = RankingSelectViewSupport.NormalizeSelection(
+            index,
+            DurationsList.Count);
+        _preferences.DurationSelection = (SongDurationFilter)_selectedDuration;
+        _durationSelectionSlider?.MoveTo(_selectedDuration);
+    }
+
     [UIAction("find-btn-action")]
     private void OnFindPressed()
     {
@@ -164,6 +200,7 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
             _twoSaberEnabled,
             _secretEnabled,
             _selectedDifficulty,
+            (SongDurationFilter)_selectedDuration,
             RankingSelectViewSupport.MapCount);
     }
 
@@ -200,9 +237,23 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
         bool screenSystemEnabling)
     {
         base.DidActivate(firstActivation, addedToHierarchy, screenSystemEnabling);
+        SyncDurationSelection();
         _findButton.interactable = !_searchInProgress;
         ForceMenuLayoutRebuild();
         StartCoroutine(RebuildMenuLayoutNextFrame());
+    }
+
+    private void SyncDurationSelection()
+    {
+        var selectedDuration = RankingSelectViewSupport.NormalizeSelection(
+            (int)_preferences.DurationSelection,
+            DurationsList.Count);
+        if (_selectedDuration == selectedDuration) return;
+
+        _selectedDuration = selectedDuration;
+        _durationSegments.GetComponent<SegmentedControl>()
+            ?.SelectCellWithNumber(_selectedDuration);
+        _durationSelectionSlider?.MoveTo(_selectedDuration);
     }
 
     internal void SetSearchInProgress(bool searchInProgress)

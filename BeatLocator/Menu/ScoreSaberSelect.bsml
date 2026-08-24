@@ -65,6 +65,18 @@
                    ignore-layout="true" />
     </horizontal>
 
+    <horizontal pad="2"
+                preferred-width="100"
+                preferred-height="11"
+                child-control-width="true"
+                child-control-height="true"
+                child-align="MiddleCenter">
+            <text align="Left" text="Duration" color="#9E9E9E" />
+            <text-segments id="duration-segments" data="durations" select-cell="durationSelected" size-delta-y="7" />
+            <image id="duration-selection-slider"
+                   ignore-layout="true" />
+    </horizontal>
+
     <horizontal preferred-width="100"
                     preferred-height="7"
                     child-control-width="false"

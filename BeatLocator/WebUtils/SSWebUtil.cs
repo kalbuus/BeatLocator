@@ -362,6 +362,7 @@ internal static class SSWebUtil
         float starBuffer,
         bool onlyTwoSaber,
         int mapDifficulty,
+        SongDurationFilter durationFilter,
         int count,
         SearchContext searchContext,
         CancellationToken cancellationToken = default)
@@ -429,7 +430,9 @@ internal static class SSWebUtil
             var mapDetails = await FetchBeatSaverMapsAsync(
                 candidates.Select(candidate => candidate.Map!.Hash),
                 cancellationToken);
-            return ConvertMaps(candidates, mapDetails);
+            return ConvertMaps(candidates, mapDetails)
+                .Where(map => durationFilter.Matches(map.Duration))
+                .ToList();
         }
         catch (OperationCanceledException)
         {

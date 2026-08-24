@@ -18,6 +18,7 @@ internal static class SSEvaluationManager
         float starBuffer,
         bool onlyTwoSaber,
         int mapDifficulty,
+        SongDurationFilter durationFilter,
         int count,
         PluginConfig config,
         CancellationToken cancellationToken = default)
@@ -39,6 +40,7 @@ internal static class SSEvaluationManager
                     currentStarBuffer,
                     onlyTwoSaber,
                     mapDifficulty,
+                    durationFilter,
                     count,
                     searchContext,
                     token),
@@ -88,14 +90,11 @@ internal static class SSEvaluationManager
         RecommendationMap map,
         RecommendationDifficulty difficulty,
         float expectedStars,
-        PluginConfig config)
+        PluginConfig _)
     {
         var difficultyPoints = RecommendationEngine.CalculateDifficultyPoints(
             difficulty,
             expectedStars);
-        if (!config.RecommendationsDurationEnabled) return difficultyPoints;
-
-        var durationPoints = RecommendationEngine.CalculateDurationPoints(map, config);
-        return 0.9f * difficultyPoints + 0.1f * durationPoints;
+        return difficultyPoints;
     }
 }

@@ -580,6 +580,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         bool secretDifficulty,
         int mapBalance,
         int mapDifficulty,
+        SongDurationFilter durationFilter,
         int count)
     {
         RunMapSearchAsync(
@@ -591,6 +592,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 onlyTwoSaber,
                 mapBalance,
                 mapDifficulty,
+                durationFilter,
                 count,
                 _config,
                 cancellationToken));
@@ -602,6 +604,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         bool onlyTwoSaber,
         bool secretDifficulty,
         int mapDifficulty,
+        SongDurationFilter durationFilter,
         int count)
     {
         RunMapSearchAsync(
@@ -613,6 +616,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 starBuffer,
                 onlyTwoSaber,
                 mapDifficulty,
+                durationFilter,
                 count,
                 _config,
                 cancellationToken));

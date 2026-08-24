@@ -25,7 +25,6 @@
 
     <BeatLocatorRoot>$(MSBuildThisFileDirectory)..\</BeatLocatorRoot>
     <ModReferencesDir Condition="'$(ModReferencesDir)' == ''">$(BeatLocatorRoot)dependencies\$(DependencyProfile)</ModReferencesDir>
-    <HiveVersioningPath Condition="'$(HiveVersioningPath)' == ''">$(BeatSaberDir)\Libs\Hive.Versioning.dll</HiveVersioningPath>
 
     <PluginId>BeatLocator</PluginId>
     <PluginName>BeatLocator</PluginName>

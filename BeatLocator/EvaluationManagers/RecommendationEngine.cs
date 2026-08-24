@@ -19,6 +19,7 @@ internal static class RecommendationEngine
     private const float MinimumTargetStars = 1f;
     private const float MaximumTargetStars = 15f;
     private const float StarBufferStep = 0.5f;
+    private const float MaximumAdaptiveStarBuffer = 2f;
     private static readonly System.Random Random = new System.Random();
     private static readonly List<RecommendationMap> SessionSongHistoryEntries =
         new List<RecommendationMap>();
@@ -216,9 +217,12 @@ internal static class RecommendationEngine
         var maximumUsefulBuffer = Math.Max(
             expectedStars - MinimumTargetStars,
             MaximumTargetStars - expectedStars);
+        var maximumStarBuffer = Math.Min(
+            MaximumAdaptiveStarBuffer,
+            maximumUsefulBuffer);
         var currentStarBuffer = Math.Min(
             Math.Max(0f, starBuffer),
-            maximumUsefulBuffer);
+            maximumStarBuffer);
 
         while (true)
         {
@@ -231,8 +235,9 @@ internal static class RecommendationEngine
             {
                 var serviceName = provider.GetDisplayName();
                 return MapSearchResult.Failure(
-                    $"{serviceName} could not complete the map request. " +
-                    "Check your sign-in and internet connection, then try again.");
+                    $"{serviceName} could not find a ranked map matching your current settings. " +
+                    $"Try changing the {filterDescription}. " +
+                    "If the search still fails with broad settings, check your sign-in and internet connection.");
             }
 
             var availableMaps = ExcludeSessionHistory(requestedMaps);
@@ -265,19 +270,21 @@ internal static class RecommendationEngine
                 return MapSearchResult.Success(selectedDifficulty);
             }
 
-            if (currentStarBuffer >= maximumUsefulBuffer)
+            if (currentStarBuffer >= maximumStarBuffer)
             {
                 Plugin.Log.Warn(
                     "No difficulty with a positive score was found after searching " +
-                    $"the full {MinimumTargetStars:0.#}-{MaximumTargetStars:0.#} star range.");
+                    $"within {maximumStarBuffer:0.#} stars of the " +
+                    $"{expectedStars:0.##}-star target.");
                 return MapSearchResult.Failure(
-                    "No ranked maps matched your profile and current filters. " +
+                    $"No ranked maps matched your profile within " +
+                    $"{maximumStarBuffer:0.#} stars of the selected difficulty. " +
                     $"Try changing the {filterDescription}.");
             }
 
             currentStarBuffer = Math.Min(
                 currentStarBuffer + StarBufferStep,
-                maximumUsefulBuffer);
+                maximumStarBuffer);
         }
     }
 
@@ -319,23 +326,6 @@ internal static class RecommendationEngine
             ? 1f - difficultyDifference / 1.5f
             : 0f;
         return Mathf.Clamp01(difficultyPoints);
-    }
-
-    internal static float CalculateDurationPoints(
-        RecommendationMap map,
-        PluginConfig config)
-    {
-        if (map.Duration >= config.MinimumRecommendedSongDurationSeconds &&
-            map.Duration <= config.MaximumRecommendedSongDurationSeconds)
-        {
-            return 1f;
-        }
-
-        var distance =
-            map.Duration < config.MinimumRecommendedSongDurationSeconds
-                ? config.MinimumRecommendedSongDurationSeconds - map.Duration
-                : map.Duration - config.MaximumRecommendedSongDurationSeconds;
-        return Mathf.Max(0f, 1f - (distance ?? 15f) / 15f);
     }
 
     internal static DifficultyRange CalculateCenteredDifficultyRange(

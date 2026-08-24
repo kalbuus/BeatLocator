@@ -30,6 +30,18 @@ internal static class RankingSelectViewSupport
         };
     }
 
+    internal static List<string> CreateDurations()
+    {
+        return new List<string>
+        {
+            "ANY",
+            "SHORT",
+            "SMALL",
+            "NORMAL",
+            "LONG"
+        };
+    }
+
     internal static int NormalizeSelection(int selection, int optionCount)
     {
         return Mathf.Clamp(selection, 0, Mathf.Max(0, optionCount - 1));

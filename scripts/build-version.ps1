@@ -44,7 +44,9 @@ if ($null -eq $bsipaArchive) {
 
 $bsipaExtractionDirectory = Join-Path $repositoryRoot "artifacts\\bsipa\\$dependencyProfile"
 $hiveVersioningPath = Join-Path $bsipaExtractionDirectory 'IPA\\Libs\\Hive.Versioning.dll'
-if (-not (Test-Path -LiteralPath $hiveVersioningPath)) {
+$harmonyPath = Join-Path $bsipaExtractionDirectory 'IPA\\Libs\\0Harmony.dll'
+if (-not (Test-Path -LiteralPath $hiveVersioningPath) -or
+    -not (Test-Path -LiteralPath $harmonyPath)) {
     Expand-Archive -LiteralPath $bsipaArchive.FullName -DestinationPath $bsipaExtractionDirectory -Force
 }
 
@@ -58,13 +60,17 @@ if ($usingStrippedReferences) {
 if (-not (Test-Path -LiteralPath $hiveVersioningPath)) {
     throw "BSIPA archive did not contain Hive.Versioning.dll: $($bsipaArchive.FullName)"
 }
+if (-not (Test-Path -LiteralPath $harmonyPath)) {
+    throw "BSIPA archive did not contain 0Harmony.dll: $($bsipaArchive.FullName)"
+}
 
 $arguments = @(
     'build', $solutionPath,
     '--configuration', $Configuration,
     "-p:BeatSaberVersion=$GameVersion",
     "-p:BeatSaberDir=$resolvedBeatSaberDir",
-    "-p:HiveVersioningPath=$hiveVersioningPath"
+    "-p:HiveVersioningPath=$hiveVersioningPath",
+    "-p:HarmonyPath=$harmonyPath"
 )
 
 if ($NoRestore) {

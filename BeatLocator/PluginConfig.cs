@@ -14,12 +14,6 @@ internal class PluginConfig
     // public virtual int NumValue { get; set; } = 42;
     // public virtual Color TheColor { get; set; } = new Color(0.12f, 0.34f, 0.56f);
 
-    public virtual bool RecommendationsDurationEnabled { get; set; } = false;
-
-    public virtual float MinimumRecommendedSongDurationSeconds { get; set; } = 120f;
-
-    public virtual float MaximumRecommendedSongDurationSeconds { get; set; } = 300f;
-
     public virtual float SpeedAnimationValue { get; set; } = 1f;
 
     public virtual bool isEndMePossible { get; set; } = true;
@@ -35,6 +29,8 @@ internal class PluginConfig
     public virtual bool BeatLeaderTwoSaberEnabled { get; set; } = false;
 
     public virtual bool BeatLeaderSecretDifficultyEnabled { get; set; } = false;
+
+    public virtual int DurationSelection { get; set; } = 0;
 
     public virtual int ScoreSaberPlayedSelection { get; set; } = 0;
 
