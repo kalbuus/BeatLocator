@@ -34,20 +34,23 @@ internal static class SSEvaluationManager
                 platformUserModel,
                 RecommendationEngine.ProfilePlayNumber,
                 token),
-            loadMapsAsync: (expectedStars, currentStarBuffer, token) =>
-                SSWebUtil.FindMapAsync(
-                    expectedStars,
-                    currentStarBuffer,
-                    onlyTwoSaber,
-                    mapDifficulty,
-                    durationFilter,
-                    count,
-                    searchContext,
-                    token),
+            loadMapsAsync: async (expectedStars, currentStarBuffer, token) =>
+                new RecommendationEngine.MapSampleResult(
+                    await SSWebUtil.FindMapAsync(
+                        expectedStars,
+                        currentStarBuffer,
+                        onlyTwoSaber,
+                        mapDifficulty,
+                        durationFilter,
+                        count,
+                        searchContext,
+                        token),
+                    hasAdditionalSample: false),
             scoreDifficulty: CalculateDifficultyScore,
             filterCandidateAsync: playedFilter == ScoreSaberPlayedFilter.New
                 ? FilterNewCandidateAsync
                 : (RecommendationEngine.CandidateFilter?)null,
+            samplesPerStarBuffer: 1,
             cancellationToken);
 
         async Task<RecommendationEngine.CandidateFilterResult> FilterNewCandidateAsync(

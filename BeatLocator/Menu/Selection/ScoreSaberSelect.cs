@@ -13,6 +13,10 @@ namespace BeatLocator.Menu;
 
 public sealed class ScoreSaberSelect : BSMLAutomaticViewController
 {
+    // I will have this here before i code a good interface :3
+    private const float AnyFilterVisualOffset = 10f;
+    private const float NewFilterVisualOffset = -10f;
+
     [UIComponent("exit-button")]
     private readonly Button _exitButton = null!;
     [UIComponent("exit-icon")]
@@ -66,7 +70,7 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
     [UIValue("playedFilters")]
     public List<string> PlayedFiltersList { get; set; } = new List<string>
     {
-        "Doesn't matter",
+        "Any",
         "Played",
         "New"
     };
@@ -293,6 +297,73 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
         if (transform is RectTransform viewRoot)
         {
             RankingSelectViewSupport.ForceLayout(viewRoot);
+            EqualizePlayedSegmentCells();
+        }
+    }
+
+    private void EqualizePlayedSegmentCells()
+    {
+        if (_playedSegments.rect.width <= 0f)
+        {
+            return;
+        }
+
+        var cellRects = new HashSet<RectTransform>();
+        TMP_Text? anyFilterLabel = null;
+        TMP_Text? newFilterLabel = null;
+        foreach (var label in _playedSegments
+                     .GetComponentsInChildren<TMP_Text>(true))
+        {
+            Transform cellTransform = label.transform;
+            while (cellTransform.parent != null &&
+                   cellTransform.parent != _playedSegments)
+            {
+                cellTransform = cellTransform.parent;
+            }
+
+            if (cellTransform.parent == _playedSegments &&
+                cellTransform is RectTransform cellRect)
+            {
+                cellRects.Add(cellRect);
+                if (label.text == PlayedFiltersList[0])
+                {
+                    anyFilterLabel = label;
+                }
+                else if (label.text == PlayedFiltersList[2])
+                {
+                    newFilterLabel = label;
+                }
+            }
+        }
+
+        if (cellRects.Count != PlayedFiltersList.Count)
+        {
+            return;
+        }
+
+        var cellWidth = _playedSegments.rect.width / PlayedFiltersList.Count;
+        foreach (var cellRect in cellRects)
+        {
+            cellRect.SetSizeWithCurrentAnchors(
+                RectTransform.Axis.Horizontal,
+                cellWidth);
+        }
+
+        LayoutRebuilder.ForceRebuildLayoutImmediate(_playedSegments);
+        if (anyFilterLabel != null)
+        {
+            var labelPosition = anyFilterLabel.rectTransform.anchoredPosition;
+            anyFilterLabel.rectTransform.anchoredPosition = new Vector2(
+                AnyFilterVisualOffset,
+                labelPosition.y);
+        }
+
+        if (newFilterLabel != null)
+        {
+            var labelPosition = newFilterLabel.rectTransform.anchoredPosition;
+            newFilterLabel.rectTransform.anchoredPosition = new Vector2(
+                NewFilterVisualOffset,
+                labelPosition.y);
         }
     }
 }

@@ -25,6 +25,9 @@ internal static class BLWebUtil
     private const float MinimumRankedStars = 1f;
     private const float MaximumRankedStars = 15f;
     private static readonly HttpClient HttpClient = new HttpClient();
+    private static readonly object MapPageCursorSync = new object();
+    private static readonly Dictionary<string, int> NextMapPageByQuery =
+        new Dictionary<string, int>(StringComparer.Ordinal);
     
     internal static string? userId = string.Empty;
     
@@ -128,7 +131,7 @@ internal static class BLWebUtil
         }
     }
 
-    internal static async Task<List<RecommendationMap>?> FindMapAsync(
+    internal static async Task<RecommendationEngine.MapSampleResult> FindMapAsync(
         float expectedStars,
         bool played,
         float starBuffer,
@@ -160,7 +163,6 @@ internal static class BLWebUtil
             string playedSetting = played ? "played" : "unplayed";
             var query = new List<string>
             {
-                "page=1",
                 $"count={count}",
                 $"sortBy={sortIndex}",
                 $"order={sortOrder}",
@@ -179,16 +181,16 @@ internal static class BLWebUtil
             if (maximumDuration.HasValue)
                 query.Add($"duration_to={maximumDuration.Value}");
 
-            var uri = GetBeatLeaderApiUrl() + "/maps?" + string.Join("&", query);
-            
-            // This goes through BeatLeader.NetworkingUtils, which calls its own
-            // Authentication.EnsureLoggedIn before sending the UnityWebRequest.
-            // BeatLocator does not read platform tickets or session cookies.
-            var responseBody = await SendAuthenticatedBeatLeaderRequestAsync(uri, cancellationToken)
+            var queryKey = string.Join("&", query);
+            var requestedPage = TakeNextMapPage(queryKey);
+            var result = await RequestMapsPageAsync(query, requestedPage, cancellationToken)
                 .ConfigureAwait(false);
-            var result = JsonConvert.DeserializeObject<MapsResponse>(responseBody);
-
-            var maps = result?.Data ?? new List<RecommendationMap>();
+            var totalPages = GetTotalPages(result.Metadata, count);
+            AdvanceMapPage(queryKey, requestedPage, totalPages);
+            Plugin.Log.Debug(
+                $"BeatLeader map search sampled page {requestedPage} of {totalPages} " +
+                "for the current filters.");
+            var maps = result.Data ?? new List<RecommendationMap>();
             foreach (var map in maps)
             {
                 if (map.Difficulties == null) continue;
@@ -204,7 +206,9 @@ internal static class BLWebUtil
 
             maps.RemoveAll(map => map.Difficulties == null || map.Difficulties.Count == 0);
 
-            return maps;
+            return new RecommendationEngine.MapSampleResult(
+                maps,
+                hasAdditionalSample: totalPages > 1);
         }
         catch (OperationCanceledException)
         {
@@ -213,7 +217,61 @@ internal static class BLWebUtil
         catch (Exception exception)
         {
             Plugin.Log.Error($"Could not find BeatLeader map: {exception}");
-            return null;
+            return new RecommendationEngine.MapSampleResult(
+                maps: null,
+                hasAdditionalSample: false);
+        }
+    }
+
+    private static async Task<MapsResponse> RequestMapsPageAsync(
+        IReadOnlyCollection<string> query,
+        int page,
+        CancellationToken cancellationToken)
+    {
+        var uri = GetBeatLeaderApiUrl() + "/maps?page=" + page + "&" +
+                  string.Join("&", query);
+
+        // This goes through BeatLeader.NetworkingUtils, which calls its own
+        // Authentication.EnsureLoggedIn before sending the UnityWebRequest.
+        // BeatLocator does not read platform tickets or session cookies.
+        var responseBody = await SendAuthenticatedBeatLeaderRequestAsync(
+                uri,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return JsonConvert.DeserializeObject<MapsResponse>(responseBody)
+               ?? new MapsResponse();
+    }
+
+    private static int GetTotalPages(MapResponseMetadata? metadata, int fallbackPageSize)
+    {
+        if (metadata == null || metadata.Total <= 0) return 1;
+
+        var pageSize = metadata.ItemsPerPage > 0
+            ? metadata.ItemsPerPage
+            : Math.Max(1, fallbackPageSize);
+        return Math.Max(1, (metadata.Total + pageSize - 1) / pageSize);
+    }
+
+    private static int TakeNextMapPage(string queryKey)
+    {
+        lock (MapPageCursorSync)
+        {
+            return NextMapPageByQuery.TryGetValue(queryKey, out var page) && page > 0
+                ? page
+                : 1;
+        }
+    }
+
+    private static void AdvanceMapPage(
+        string queryKey,
+        int requestedPage,
+        int totalPages)
+    {
+        lock (MapPageCursorSync)
+        {
+            NextMapPageByQuery[queryKey] = requestedPage >= totalPages
+                ? 1
+                : requestedPage + 1;
         }
     }
 
@@ -800,8 +858,20 @@ internal static class BLWebUtil
 
     private sealed class MapsResponse
     {
+        [JsonProperty("metadata")]
+        public MapResponseMetadata? Metadata { get; set; }
+
         [JsonProperty("data")]
         public List<RecommendationMap>? Data { get; set; }
+    }
+
+    private sealed class MapResponseMetadata
+    {
+        [JsonProperty("itemsPerPage")]
+        public int ItemsPerPage { get; set; }
+
+        [JsonProperty("total")]
+        public int Total { get; set; }
     }
     
     #endregion

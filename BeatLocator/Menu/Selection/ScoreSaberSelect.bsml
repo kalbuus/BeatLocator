@@ -1,4 +1,4 @@
-<vertical child-control-height="false" child-expand-height="false" child-expand-width="false" child-align="UpperCenter" spacing="3.5">
+<vertical child-control-height="false" child-expand-height="false" child-expand-width="false" child-align="UpperCenter" spacing="2.5">
     <horizontal horizontal-fit="PreferredSize"
                 vertical-fit="PreferredSize"
                 child-control-width="false"
@@ -41,6 +41,7 @@
                preserve-aspect="true" />
     </button>
 
+    <!-- Song Difficulty -->
     <horizontal pad="2"
                     preferred-width="100"
                     preferred-height="11"
@@ -53,18 +54,7 @@
                    ignore-layout="true" />
     </horizontal>
 
-    <horizontal pad="2"
-                    preferred-width="100"
-                    preferred-height="11"
-                    child-control-width="true"
-                    child-control-height="true"
-                    child-align="MiddleCenter">
-            <text align="Left" text="Played By Me" color="#9E9E9E" />
-            <text-segments id="played-segments" data="playedFilters" select-cell="playedFilterSelected" size-delta-y="7" />
-            <image id="played-selection-slider"
-                   ignore-layout="true" />
-    </horizontal>
-
+    <!-- Song Duration -->
     <horizontal pad="2"
                 preferred-width="100"
                 preferred-height="11"
@@ -77,8 +67,30 @@
                    ignore-layout="true" />
     </horizontal>
 
+    <!-- Song Played Status -->
+    <horizontal pad="2"
+                    preferred-width="100"
+                    preferred-height="11"
+                    child-control-width="true"
+                    child-control-height="true"
+                    child-expand-width="false"
+                    child-align="MiddleCenter"
+                    spacing="6.5">
+            <text align="Left"
+                  text="Played By Me"
+                  color="#9E9E9E"
+                  preferred-width="32.5" />
+            <text-segments id="played-segments"
+                           data="playedFilters"
+                           select-cell="playedFilterSelected"
+                           preferred-width="57"
+                           size-delta-y="7" />
+            <image id="played-selection-slider"
+                   ignore-layout="true" />
+    </horizontal>
+
     <horizontal preferred-width="100"
-                    preferred-height="7"
+                    preferred-height="10"
                     child-control-width="false"
                     child-control-height="false"
                     child-expand-width="false"
@@ -89,7 +101,7 @@
                     text=""
                     stroke-visible="false"
                     on-click="toggleTwoSaber"
-                    preferred-width="32"
+                    preferred-width="50"
                     preferred-height="7"
                     pad="0">
                 <text id="two-saber-toggle-label"
@@ -102,7 +114,7 @@
                     text=""
                     stroke-visible="false"
                     on-click="toggleSecretDifficulty"
-                    preferred-width="32"
+                    preferred-width="50"
                     preferred-height="7"
                     pad="0">
                 <text id="secret-toggle-label"

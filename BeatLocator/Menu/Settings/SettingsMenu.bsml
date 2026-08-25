@@ -1,29 +1,12 @@
 <scrollable-settings-container xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                                xsi:noNamespaceSchemaLocation="https://monkeymanboy.github.io/BSML-Docs/BSMLSchema.xsd">
-    <settings-submenu text="Recommendations" hover-hint="Map recommendation settings">
-        <settings-container>
-            <vertical spacing="4" vertical-fit="PreferredSize">
-                <text text="Settings for the recommendation algorithm"
-                      font-size="5"
-                      align="Center"/>
-                <dropdown-list-setting text="END ME preferred setting"
-                                value="end-me-choice" 
-                                choices="end-me-options"
-                                hover-hint="Changes the way algorithm works on the END ME difficulty"/>
-                <button text="Back" click-event="back"/>
-            </vertical>
-        </settings-container>
-    </settings-submenu>
-    
-    <settings-submenu text="Animation" hover-hint="Roulette animation settings">
-        <settings-container>
-            <vertical spacing="4" vertical-fit="PreferredSize">
-                <text text="Settings for the roulette animation"
-                       font-size="5"
-                       align="Center"/>
-                <slider-setting text="Animation speed" min="0.5" max="2" increment="0.25" value="speed-animation-value" />
-                <button text="Back" click-event="back"/>
-            </vertical>
-        </settings-container>
-    </settings-submenu>
+    <dropdown-list-setting text="END ME preferred setting"
+                           value="end-me-choice"
+                           choices="end-me-options"
+                           hover-hint="Changes the way algorithm works on the END ME difficulty"/>
+    <slider-setting text="Animation speed"
+                    min="0.5"
+                    max="2"
+                    increment="0.25"
+                    value="speed-animation-value"/>
 </scrollable-settings-container>

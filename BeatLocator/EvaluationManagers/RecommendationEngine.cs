@@ -33,7 +33,7 @@ internal static class RecommendationEngine
     internal delegate Task<List<PlayerScoreEntry>?> ScoreLoader(
         CancellationToken cancellationToken);
 
-    internal delegate Task<List<RecommendationMap>?> MapLoader(
+    internal delegate Task<MapSampleResult> MapLoader(
         float expectedStars,
         float starBuffer,
         CancellationToken cancellationToken);
@@ -47,6 +47,20 @@ internal static class RecommendationEngine
     internal delegate Task<CandidateFilterResult> CandidateFilter(
         EvaluatedDifficulty difficulty,
         CancellationToken cancellationToken);
+
+    internal readonly struct MapSampleResult
+    {
+        internal MapSampleResult(
+            List<RecommendationMap>? maps,
+            bool hasAdditionalSample)
+        {
+            Maps = maps;
+            HasAdditionalSample = hasAdditionalSample;
+        }
+
+        internal List<RecommendationMap>? Maps { get; }
+        internal bool HasAdditionalSample { get; }
+    }
 
     internal readonly struct CandidateFilterResult
     {
@@ -187,6 +201,7 @@ internal static class RecommendationEngine
         MapLoader loadMapsAsync,
         DifficultyScorer scoreDifficulty,
         CandidateFilter? filterCandidateAsync,
+        int samplesPerStarBuffer,
         CancellationToken cancellationToken = default)
     {
         var profileResult = await GetDifficultyRangeAsync(
@@ -223,62 +238,86 @@ internal static class RecommendationEngine
         var currentStarBuffer = Math.Min(
             Math.Max(0f, starBuffer),
             maximumStarBuffer);
+        var sampleLimit = Math.Max(1, samplesPerStarBuffer);
+        var totalProviderMaps = 0;
+        var totalAvailableMaps = 0;
 
         while (true)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var requestedMaps = await loadMapsAsync(
-                expectedStars,
-                currentStarBuffer,
-                cancellationToken);
-            if (requestedMaps == null)
+            for (var sample = 1; sample <= sampleLimit; sample++)
             {
-                var serviceName = provider.GetDisplayName();
-                return MapSearchResult.Failure(
-                    $"{serviceName} could not find a ranked map matching your current settings. " +
-                    $"Try changing the {filterDescription}. " +
-                    "If the search still fails with broad settings, check your sign-in and internet connection.");
-            }
+                cancellationToken.ThrowIfCancellationRequested();
+                var mapSample = await loadMapsAsync(
+                    expectedStars,
+                    currentStarBuffer,
+                    cancellationToken);
+                var requestedMaps = mapSample.Maps;
+                if (requestedMaps == null)
+                {
+                    var serviceName = provider.GetDisplayName();
+                    return MapSearchResult.Failure(
+                        $"{serviceName} could not find a ranked map matching your current settings. " +
+                        $"Try changing the {filterDescription}. " +
+                        "If the search still fails with broad settings, check your sign-in and internet connection.");
+                }
 
-            var availableMaps = ExcludeSessionHistory(requestedMaps);
-            if (requestedMaps.Count > 0 && availableMaps.Count == 0)
-            {
-                return MapSearchResult.Failure(
-                    "All matching maps have already been shown during this Beat Saber session. " +
-                    "Restart the game or change the filters.");
-            }
+                var availableMaps = ExcludeSessionHistory(requestedMaps);
+                totalProviderMaps += requestedMaps.Count;
+                totalAvailableMaps += availableMaps.Count;
 
-            var evaluatedDifficulties = EvaluateMapDifficulties(
-                availableMaps,
-                expectedStars,
-                config,
-                scoreDifficulty);
-            var selectionResult = await SelectRandomDifficultyAsync(
-                evaluatedDifficulties,
-                filterCandidateAsync,
-                cancellationToken);
-            if (selectionResult.FailureReason != null)
-            {
-                return MapSearchResult.Failure(selectionResult.FailureReason);
-            }
+                var evaluatedDifficulties = EvaluateMapDifficulties(
+                    availableMaps,
+                    expectedStars,
+                    config,
+                    scoreDifficulty);
+                var positiveDifficultyCount = evaluatedDifficulties.Count(
+                    difficulty => IsValidWeight(difficulty.Score));
+                Plugin.Log.Debug(
+                    $"{provider.GetDisplayName()} search sample {sample}/{sampleLimit} at " +
+                    $"{expectedStars:0.##} ± {currentStarBuffer:0.#} stars: " +
+                    $"provider_maps={requestedMaps.Count}, " +
+                    $"after_session_history={availableMaps.Count}, " +
+                    $"evaluated_difficulties={evaluatedDifficulties.Count}, " +
+                    $"positive_difficulties={positiveDifficultyCount}.");
+                var selectionResult = await SelectRandomDifficultyAsync(
+                    evaluatedDifficulties,
+                    filterCandidateAsync,
+                    cancellationToken);
+                if (selectionResult.FailureReason != null)
+                {
+                    return MapSearchResult.Failure(selectionResult.FailureReason);
+                }
 
-            var selectedDifficulty = selectionResult.Difficulty;
-            if (selectedDifficulty != null)
-            {
-                AddToSessionHistory(selectedDifficulty.Map);
-                LogSelection(selectedDifficulty);
-                return MapSearchResult.Success(selectedDifficulty);
+                var selectedDifficulty = selectionResult.Difficulty;
+                if (selectedDifficulty != null)
+                {
+                    AddToSessionHistory(selectedDifficulty.Map);
+                    LogSelection(selectedDifficulty);
+                    return MapSearchResult.Success(selectedDifficulty);
+                }
+
+                if (!mapSample.HasAdditionalSample)
+                {
+                    break;
+                }
             }
 
             if (currentStarBuffer >= maximumStarBuffer)
             {
+                if (totalProviderMaps > 0 && totalAvailableMaps == 0)
+                {
+                    return MapSearchResult.Failure(
+                        "All matching maps checked by the provider have already been shown " +
+                        "during this Beat Saber session. Restart the game or change the filters.");
+                }
+
                 Plugin.Log.Warn(
-                    "No difficulty with a positive score was found after searching " +
-                    $"within {maximumStarBuffer:0.#} stars of the " +
+                    "No eligible difficulty was found in the sampled provider results " +
+                    $"after widening the search up to {maximumStarBuffer:0.#} stars from the " +
                     $"{expectedStars:0.##}-star target.");
                 return MapSearchResult.Failure(
-                    $"No ranked maps matched your profile within " +
-                    $"{maximumStarBuffer:0.#} stars of the selected difficulty. " +
+                    "No eligible ranked map was found in the provider result pages " +
+                    "checked for this attempt. " +
                     $"Try changing the {filterDescription}.");
             }
 

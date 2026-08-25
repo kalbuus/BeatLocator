@@ -1,4 +1,4 @@
-﻿<vertical child-control-height="false" child-expand-height="false" child-expand-width="false" child-align="UpperCenter" spacing="3.5">
+﻿<vertical child-control-height="false" child-expand-height="false" child-expand-width="false" child-align="UpperCenter" spacing="2.5">
     
     <horizontal horizontal-fit="PreferredSize"
                 vertical-fit="PreferredSize"
@@ -84,7 +84,7 @@
     </horizontal>
     
     <horizontal preferred-width="100"
-                preferred-height="12"
+                preferred-height="10"
                 child-control-width="false"
                 child-control-height="false"
                 child-expand-width="false"

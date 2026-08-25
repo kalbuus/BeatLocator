@@ -160,10 +160,29 @@ internal sealed class BeatLeaderUploadObserver : IInitializable, IDisposable
     private void HandleModernStateChanged(object? request, object? state, string? failReason)
     {
         var result = GetMemberValue(request, "Result");
+        var stateName = state?.ToString() ?? string.Empty;
+        var status = GetMemberValue(result, "Status")?.ToString() ?? string.Empty;
+        var detail = GetMemberValue(result, "Description")?.ToString() ?? failReason;
+
+        // BeatLeader 0.9.34 exposes the modern StateChangedEvent, but its
+        // successful Result is BeatLeader.Models.Score and has no Status or
+        // Description member. Finished is therefore only an upload-completion
+        // signal; the public score API remains the source of truth for PB/PP.
+        if (string.Equals(stateName, "Finished", StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrWhiteSpace(status))
+        {
+            status = "FinishedWithoutStatus";
+            var scoreId = GetMemberValue(result, "id")?.ToString() ??
+                          GetMemberValue(result, "Id")?.ToString();
+            detail = !string.IsNullOrWhiteSpace(scoreId)
+                ? $"compatibility_score_id={scoreId}; payload={result?.GetType().FullName ?? "<null>"}"
+                : $"payload={result?.GetType().FullName ?? "<null>"}";
+        }
+
         CompleteTerminalState(
             state,
-            GetMemberValue(result, "Status")?.ToString() ?? string.Empty,
-            GetMemberValue(result, "Description")?.ToString() ?? failReason);
+            status,
+            detail);
     }
 
     private void HandleLegacyStateChanged(object? state, object? result, string? failReason)

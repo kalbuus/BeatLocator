@@ -49,6 +49,7 @@ internal static class BLEvaluationManager
                     mapBalance,
                     expectedStars),
             filterCandidateAsync: null,
+            samplesPerStarBuffer: 2,
             cancellationToken);
     }
 

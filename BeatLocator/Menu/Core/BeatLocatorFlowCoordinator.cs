@@ -159,16 +159,22 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     internal void ShowRankingSelect()
     {
+        ShowRankingSelect(null);
+    }
+
+    private void ShowRankingSelect(Action? transitionFinished)
+    {
         _postLevelFlowReady = false;
         _postLevelRetrySelection = null;
-        if (_rankingProvider == RankingProvider.ScoreSaber)
-        {
-            ShowScoreSaberSelect();
-        }
-        else
-        {
-            ShowBeatLeaderSelect();
-        }
+        var viewController = _rankingProvider == RankingProvider.ScoreSaber
+            ? (ViewController)_scoreSaberSelect.Value
+            : _beatLeaderSelect.Value;
+        _activeRankingSelect = viewController;
+        ReplaceTopViewController(
+            viewController,
+            transitionFinished,
+            ViewController.AnimationType.In,
+            ViewController.AnimationDirection.Horizontal);
     }
 
     internal void PresentPostLevelResult(PostLevelDisplayResult result)
@@ -669,6 +675,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         var cancellationSource = new CancellationTokenSource();
         _mapSearchCancellationSource = cancellationSource;
         var showRoulette = false;
+        PopupRequest? failurePopup = null;
 
         try
         {
@@ -682,7 +689,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
             if (!searchResult.IsSuccess || searchResult.SelectedDifficulty == null)
             {
-                ShowPopup(
+                failurePopup = new PopupRequest(
                     "SONG NOT FOUND",
                     searchResult.FailureReason ?? "No suitable song was found.");
                 return;
@@ -700,14 +707,14 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         {
             var serviceName = provider.GetDisplayName();
             Plugin.Log.Error($"{serviceName} map search timed out after 45 seconds.");
-            ShowPopup(
+            failurePopup = new PopupRequest(
                 "SEARCH TIMED OUT",
                 $"{serviceName} did not respond within 45 seconds. Check your connection and try again.");
         }
         catch (Exception exception)
         {
             Plugin.Log.Error($"Unexpected error while finding maps: {exception}");
-            ShowPopup(
+            failurePopup = new PopupRequest(
                 "SONG SEARCH FAILED",
                 $"The search stopped because of an unexpected error: {exception.Message}");
         }
@@ -737,7 +744,20 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
             }
             else if (startedFromPostLevel && !wasCanceled)
             {
-                ShowRankingSelect();
+                // A native popup presented over the post-level loading controller
+                // can become detached when that controller is replaced. Restore a
+                // usable destination first, then present the failure dialog.
+                ShowRankingSelect(() =>
+                {
+                    if (failurePopup.HasValue)
+                    {
+                        ShowPopup(failurePopup.Value);
+                    }
+                });
+            }
+            else if (failurePopup.HasValue && !wasCanceled)
+            {
+                ShowPopup(failurePopup.Value);
             }
         }
     }
@@ -752,7 +772,12 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         string message,
         string buttonText = "OK")
     {
-        _popupQueue.Enqueue(new PopupRequest(title, message, buttonText));
+        ShowPopup(new PopupRequest(title, message, buttonText));
+    }
+
+    private void ShowPopup(PopupRequest popup)
+    {
+        _popupQueue.Enqueue(popup);
         PresentNextPopup();
     }
 
@@ -779,7 +804,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     private readonly struct PopupRequest
     {
-        internal PopupRequest(string title, string message, string buttonText)
+        internal PopupRequest(string title, string message, string buttonText = "OK")
         {
             Title = title;
             Message = message;

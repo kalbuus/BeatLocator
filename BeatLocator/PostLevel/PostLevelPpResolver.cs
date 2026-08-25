@@ -128,8 +128,12 @@ internal sealed class PostLevelPpResolver
             upload.Status,
             "UploadedLegacy",
             StringComparison.OrdinalIgnoreCase);
+        var requiresCompatibilityPolling = isLegacyUpload || string.Equals(
+            upload.Status,
+            "FinishedWithoutStatus",
+            StringComparison.OrdinalIgnoreCase);
         if (!string.Equals(upload.State, "Finished", StringComparison.OrdinalIgnoreCase) ||
-            !isLegacyUpload &&
+            !requiresCompatibilityPolling &&
             !string.Equals(upload.Status, "Uploaded", StringComparison.OrdinalIgnoreCase))
         {
             return new ProviderPpResult
@@ -141,11 +145,18 @@ internal sealed class PostLevelPpResolver
             };
         }
 
+        if (requiresCompatibilityPolling && !isLegacyUpload)
+        {
+            Plugin.Log.Info(
+                $"[PP] Run {session.RunId}: BeatLeader finished upload without exposing " +
+                "a result status; polling the public score API for settled PP.");
+        }
+
         return await ResolvePublicBeatLeaderScoreAsync(
                 session,
                 results,
                 baseline,
-                isLegacyUpload)
+                requiresCompatibilityPolling)
             .ConfigureAwait(false);
     }
 
