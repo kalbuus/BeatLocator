@@ -216,8 +216,9 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         bool screenSystemEnabling)
     {
         base.DidActivate(firstActivation, addedToHierarchy, screenSystemEnabling);
+        _rouletteRoot.gameObject.SetActive(true);
 
-        if (addedToHierarchy && _selectedDifficulty != null)
+        if ((addedToHierarchy || screenSystemEnabling) && _selectedDifficulty != null)
         {
             StartDemo();
         }
@@ -229,11 +230,12 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     {
         base.DidDeactivate(removedFromHierarchy, screenSystemDisabling);
 
-        if (!removedFromHierarchy) return;
+        if (!removedFromHierarchy && !screenSystemDisabling) return;
 
         _runId++;
         StopPreviewPlayback();
         StopAnimations();
+        _rouletteRoot.gameObject.SetActive(false);
     }
 
     [UIAction("menuPressed")]

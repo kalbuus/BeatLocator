@@ -7,6 +7,9 @@ namespace BeatLocator.Menu;
 
 internal sealed class PostLevelLoadingViewController : BSMLAutomaticViewController
 {
+    [UIComponent("loading-root")]
+    private RectTransform _loadingRoot = null!;
+
     [UIValue("loadingText")]
     public string LoadingText { get; private set; } = "CALCULATING PP";
 
@@ -28,7 +31,8 @@ internal sealed class PostLevelLoadingViewController : BSMLAutomaticViewControll
         bool screenSystemEnabling)
     {
         base.DidActivate(firstActivation, addedToHierarchy, screenSystemEnabling);
-        if (!addedToHierarchy) return;
+        _loadingRoot.gameObject.SetActive(true);
+        if (!addedToHierarchy && !screenSystemEnabling) return;
 
         _animationId++;
         if (_animationCoroutine != null)
@@ -47,6 +51,10 @@ internal sealed class PostLevelLoadingViewController : BSMLAutomaticViewControll
         {
             StopCoroutine(_animationCoroutine);
             _animationCoroutine = null;
+        }
+        if (removedFromHierarchy || screenSystemDisabling)
+        {
+            _loadingRoot.gameObject.SetActive(false);
         }
         base.DidDeactivate(removedFromHierarchy, screenSystemDisabling);
     }

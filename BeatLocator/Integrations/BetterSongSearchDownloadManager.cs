@@ -20,6 +20,7 @@ internal static class BetterSongSearchDownloadManager
     private const string DownloaderTypeName = "BetterSongSearch.Util.SongDownloader";
     private const string DownloadEntryTypeName =
         "BetterSongSearch.UI.DownloadHistoryView+DownloadHistoryEntry";
+    private const int SongCoreRefreshTimeoutMilliseconds = 15000;
 
     public static async Task<bool> DownloadMapAsync(
         RecommendationMap map,
@@ -72,7 +73,7 @@ internal static class BetterSongSearchDownloadManager
         }
 
         await downloadTask;
-        RefreshSongCore();
+        await RefreshSongCoreAsync(cancellationToken);
         return true;
     }
 
@@ -151,26 +152,48 @@ internal static class BetterSongSearchDownloadManager
         return checkMethod.Invoke(null, new object[] { hash }) is true;
     }
 
-    private static void RefreshSongCore()
+    private static async Task RefreshSongCoreAsync(CancellationToken cancellationToken)
     {
-        var songCore = PluginManager.GetPluginFromId(SongCorePluginId)
-            ?? throw new InvalidOperationException("SongCore is not installed.");
-        var loaderType = songCore.Assembly.GetType("SongCore.Loader")
-            ?? throw new MissingMemberException("SongCore.Loader");
-        var instanceField = loaderType.GetField(
-            "Instance",
-            BindingFlags.Public | BindingFlags.Static)
-            ?? throw new MissingFieldException("SongCore.Loader", "Instance");
-        var loader = instanceField.GetValue(null)
-            ?? throw new InvalidOperationException("SongCore loader is not initialized.");
-        var refreshMethod = loaderType.GetMethod(
-            "RefreshSongs",
-            BindingFlags.Public | BindingFlags.Instance,
-            null,
-            new[] { typeof(bool) },
-            null)
-            ?? throw new MissingMethodException("SongCore.Loader", "RefreshSongs");
+        var completionSource = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnLevelPacksRefreshed()
+        {
+            completionSource.TrySetResult(true);
+        }
 
-        refreshMethod.Invoke(loader, new object[] { false });
+        SongCore.Loader.OnLevelPacksRefreshed += OnLevelPacksRefreshed;
+        try
+        {
+            var loader = SongCore.Loader.Instance
+                ?? throw new InvalidOperationException("SongCore loader is not initialized.");
+            Plugin.Log.Info("Waiting for SongCore level packs after the roulette download.");
+            loader.RefreshSongs(false);
+
+            using var timeoutSource =
+                new CancellationTokenSource(SongCoreRefreshTimeoutMilliseconds);
+            using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                timeoutSource.Token);
+            using var registration = linkedSource.Token.Register(
+                () => completionSource.TrySetCanceled());
+
+            try
+            {
+                await completionSource.Task;
+            }
+            catch (OperationCanceledException) when (
+                timeoutSource.IsCancellationRequested &&
+                !cancellationToken.IsCancellationRequested)
+            {
+                throw new TimeoutException(
+                    "SongCore did not finish refreshing level packs within 15 seconds.");
+            }
+
+            Plugin.Log.Info("SongCore level packs are ready after the roulette download.");
+        }
+        finally
+        {
+            SongCore.Loader.OnLevelPacksRefreshed -= OnLevelPacksRefreshed;
+        }
     }
 }

@@ -21,6 +21,9 @@ internal sealed class PpResultViewController : BSMLAutomaticViewController
     private const float PpTickEndPitch = 1.65f;
     private const float PpTickVolume = 0.4f;
 
+    [UIComponent("pp-root")]
+    private RectTransform _ppRoot = null!;
+
     [UIComponent("primary-value")]
     private TMP_Text _primaryValue = null!;
 
@@ -69,7 +72,8 @@ internal sealed class PpResultViewController : BSMLAutomaticViewController
         bool screenSystemEnabling)
     {
         base.DidActivate(firstActivation, addedToHierarchy, screenSystemEnabling);
-        if (!addedToHierarchy || _result == null) return;
+        _ppRoot.gameObject.SetActive(true);
+        if ((!addedToHierarchy && !screenSystemEnabling) || _result == null) return;
 
         _primaryValue.fontSize = _result.Outcome == PpResolutionOutcome.UploadedNewBest
             ? 18f
@@ -96,6 +100,10 @@ internal sealed class PpResultViewController : BSMLAutomaticViewController
             _animationCoroutine = null;
         }
         _ppTickAudioSource?.Stop();
+        if (removedFromHierarchy || screenSystemDisabling)
+        {
+            _ppRoot.gameObject.SetActive(false);
+        }
         base.DidDeactivate(removedFromHierarchy, screenSystemDisabling);
     }
 

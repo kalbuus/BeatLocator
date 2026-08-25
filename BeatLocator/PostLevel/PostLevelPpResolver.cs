@@ -9,6 +9,7 @@ namespace BeatLocator.PostLevel;
 internal sealed class PostLevelPpResolver
 {
     private static readonly TimeSpan UploadTimeout = TimeSpan.FromSeconds(130);
+    private static readonly TimeSpan LegacyUploadObserverGrace = TimeSpan.FromSeconds(8);
     private readonly IPlatformUserModel _platformUserModel;
 
     public PostLevelPpResolver(IPlatformUserModel platformUserModel)
@@ -73,13 +74,23 @@ internal sealed class PostLevelPpResolver
         LevelCompletionResults results,
         ProviderPpBaseline? baseline)
     {
+        if (session.BeatLeaderUploadUsesLegacyObserver)
+        {
+            return await ResolveLegacyBeatLeaderAsync(session, results, baseline)
+                .ConfigureAwait(false);
+        }
+
         if (session.BeatLeaderUploadTask == null)
         {
-            return new ProviderPpResult
-            {
-                Outcome = PpResolutionOutcome.UploadFailed,
-                Detail = "BeatLeader upload observer is unavailable."
-            };
+            Plugin.Log.Warn(
+                $"[PP] Run {session.RunId}: BeatLeader upload observer is unavailable; " +
+                "polling the public score API as a compatibility fallback.");
+            return await ResolvePublicBeatLeaderScoreAsync(
+                    session,
+                    results,
+                    baseline,
+                    true)
+                .ConfigureAwait(false);
         }
 
         var timeoutTask = Task.Delay(UploadTimeout, session.CancellationSource.Token);
@@ -130,13 +141,82 @@ internal sealed class PostLevelPpResolver
             };
         }
 
-        return await BLWebUtil.ResolveUploadedPpAsync(
-                session.Selection,
+        return await ResolvePublicBeatLeaderScoreAsync(
+                session,
+                results,
                 baseline,
-                session.LaunchedAt,
-                results.multipliedScore,
-                isLegacyUpload,
-                session.CancellationSource.Token)
+                isLegacyUpload)
             .ConfigureAwait(false);
+    }
+
+    private static async Task<ProviderPpResult> ResolveLegacyBeatLeaderAsync(
+        RoulettePlaySession session,
+        LevelCompletionResults results,
+        ProviderPpBaseline? baseline)
+    {
+        var uploadTask = session.BeatLeaderUploadTask;
+        if (uploadTask != null)
+        {
+            var graceTask = Task.Delay(
+                LegacyUploadObserverGrace,
+                session.CancellationSource.Token);
+            var completedTask = await Task.WhenAny(uploadTask, graceTask)
+                .ConfigureAwait(false);
+            if (completedTask == uploadTask)
+            {
+                var upload = await uploadTask.ConfigureAwait(false);
+                if (!string.Equals(
+                        upload.State,
+                        "Finished",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return new ProviderPpResult
+                    {
+                        Outcome = PpResolutionOutcome.UploadFailed,
+                        Detail = string.IsNullOrWhiteSpace(upload.Detail)
+                            ? $"BeatLeader upload ended with {upload.State}/{upload.Status}."
+                            : upload.Detail
+                    };
+                }
+
+                Plugin.Log.Info(
+                    $"[PP] Run {session.RunId}: legacy BeatLeader upload callback completed; " +
+                    "polling the public score API for settled PP.");
+                return await ResolvePublicBeatLeaderScoreAsync(
+                        session,
+                        results,
+                        baseline,
+                        true)
+                    .ConfigureAwait(false);
+            }
+
+            session.CancellationSource.Token.ThrowIfCancellationRequested();
+        }
+
+        Plugin.Log.Warn(
+            $"[PP] Run {session.RunId}: legacy BeatLeader upload callback did not complete " +
+            $"within {LegacyUploadObserverGrace.TotalSeconds:0} seconds; polling the public " +
+            "score API directly.");
+        return await ResolvePublicBeatLeaderScoreAsync(
+                session,
+                results,
+                baseline,
+                true)
+            .ConfigureAwait(false);
+    }
+
+    private static Task<ProviderPpResult> ResolvePublicBeatLeaderScoreAsync(
+        RoulettePlaySession session,
+        LevelCompletionResults results,
+        ProviderPpBaseline? baseline,
+        bool allowLegacyNonPbDetection)
+    {
+        return BLWebUtil.ResolveUploadedPpAsync(
+            session.Selection,
+            baseline,
+            session.LaunchedAt,
+            results.multipliedScore,
+            allowLegacyNonPbDetection,
+            session.CancellationSource.Token);
     }
 }

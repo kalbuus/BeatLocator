@@ -17,6 +17,8 @@ internal static class RankingSelectViewSupport
     internal const int MapCount = 60;
     internal const string NineSliceResource = "BeatLocator.Assets.9slice_bg.png";
     internal const string ExitIconResource = "BeatLocator.Assets.x_mark.png";
+    private static readonly Dictionary<string, Sprite> SpriteCache =
+        new Dictionary<string, Sprite>(StringComparer.Ordinal);
 
     internal static List<string> CreateDifficulties()
     {
@@ -85,6 +87,12 @@ internal static class RankingSelectViewSupport
 
     internal static Sprite LoadSprite(string resourceName)
     {
+        if (SpriteCache.TryGetValue(resourceName, out var cachedSprite) &&
+            cachedSprite)
+        {
+            return cachedSprite;
+        }
+
         using var stream = typeof(RankingSelectViewSupport).Assembly
                                .GetManifestResourceStream(resourceName)
                            ?? throw new InvalidOperationException(
@@ -100,10 +108,12 @@ internal static class RankingSelectViewSupport
                 $"Could not load image '{resourceName}'.");
         }
 
-        return Sprite.Create(
+        var sprite = Sprite.Create(
             texture,
             new Rect(0, 0, texture.width, texture.height),
             new Vector2(0.5f, 0.5f),
             100f);
+        SpriteCache[resourceName] = sprite;
+        return sprite;
     }
 }

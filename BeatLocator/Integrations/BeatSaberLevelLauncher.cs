@@ -12,7 +12,6 @@ internal static class BeatSaberLevelLauncher
 {
     private const string CustomLevelIdPrefix = "custom_level_";
     private const int LevelLoadTimeoutMilliseconds = 15000;
-    private const int LevelLoadPollMilliseconds = 100;
     private const int SelectionTimeoutMilliseconds = 5000;
     private const int SelectionPollMilliseconds = 50;
 
@@ -35,16 +34,10 @@ internal static class BeatSaberLevelLauncher
         var levelId = CustomLevelIdPrefix + hash.ToUpperInvariant();
         var level = SongCore.Loader.BeatmapLevelsModelSO.GetBeatmapLevel(levelId);
 
-        if (level == null)
+        if (level == null || SongCore.Loader.AreSongsLoading)
         {
-            SongCore.Loader.Instance.RefreshSongs(false);
-
-            var attempts = LevelLoadTimeoutMilliseconds / LevelLoadPollMilliseconds;
-            for (var attempt = 0; attempt < attempts && level == null; attempt++)
-            {
-                await Task.Delay(LevelLoadPollMilliseconds);
-                level = SongCore.Loader.BeatmapLevelsModelSO.GetBeatmapLevel(levelId);
-            }
+            await WaitForSongCoreLevelPacksAsync(levelId, level == null);
+            level = SongCore.Loader.BeatmapLevelsModelSO.GetBeatmapLevel(levelId);
         }
 
         if (level == null)
@@ -55,6 +48,52 @@ internal static class BeatSaberLevelLauncher
 
         var key = FindBeatmapKey(level, selectedDifficulty.Difficulty);
         return new ResolvedLevel(level, key);
+    }
+
+    private static async Task WaitForSongCoreLevelPacksAsync(
+        string levelId,
+        bool requestRefresh)
+    {
+        var completionSource = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnLevelPacksRefreshed()
+        {
+            completionSource.TrySetResult(true);
+        }
+
+        SongCore.Loader.OnLevelPacksRefreshed += OnLevelPacksRefreshed;
+        try
+        {
+            // Recheck after subscribing so a refresh that completed between the
+            // caller's lookup and this handler cannot leave us waiting forever.
+            var level = SongCore.Loader.BeatmapLevelsModelSO.GetBeatmapLevel(levelId);
+            if (!SongCore.Loader.AreSongsLoading && level != null)
+            {
+                return;
+            }
+
+            if (requestRefresh && !SongCore.Loader.AreSongsLoading)
+            {
+                SongCore.Loader.Instance.RefreshSongs(false);
+            }
+
+            Plugin.Log.Info(
+                $"Waiting for SongCore level packs before roulette launch " +
+                $"(requestedRefresh={requestRefresh}, loading={SongCore.Loader.AreSongsLoading}).");
+            var timeoutTask = Task.Delay(LevelLoadTimeoutMilliseconds);
+            if (await Task.WhenAny(completionSource.Task, timeoutTask) != completionSource.Task)
+            {
+                throw new TimeoutException(
+                    "SongCore did not finish refreshing level packs within 15 seconds.");
+            }
+
+            await completionSource.Task;
+            Plugin.Log.Info("SongCore level packs are ready for the roulette launch.");
+        }
+        finally
+        {
+            SongCore.Loader.OnLevelPacksRefreshed -= OnLevelPacksRefreshed;
+        }
     }
 
     public static async Task SelectDifficultyAsync(

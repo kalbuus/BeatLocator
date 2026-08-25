@@ -7,6 +7,9 @@ namespace BeatLocator.Menu;
 
 internal sealed class PostLevelTerminalViewController : BSMLAutomaticViewController
 {
+    [UIComponent("terminal-root")]
+    private RectTransform _terminalRoot = null!;
+
     [UIValue("statusText")]
     public string StatusText { get; private set; } = string.Empty;
 
@@ -35,11 +38,23 @@ internal sealed class PostLevelTerminalViewController : BSMLAutomaticViewControl
         bool screenSystemEnabling)
     {
         base.DidActivate(firstActivation, addedToHierarchy, screenSystemEnabling);
-        if (!addedToHierarchy) return;
+        _terminalRoot.gameObject.SetActive(true);
 
         _buttonCanvasGroup ??= _buttonRow.GetComponent<CanvasGroup>() ??
                                _buttonRow.gameObject.AddComponent<CanvasGroup>();
         SetButtonsInteractable(true);
+    }
+
+    protected override void DidDeactivate(
+        bool removedFromHierarchy,
+        bool screenSystemDisabling)
+    {
+        SetButtonsInteractable(false);
+        if (removedFromHierarchy || screenSystemDisabling)
+        {
+            _terminalRoot.gameObject.SetActive(false);
+        }
+        base.DidDeactivate(removedFromHierarchy, screenSystemDisabling);
     }
 
     private void SetButtonsInteractable(bool interactable)

@@ -20,6 +20,8 @@ internal sealed class BeatLeaderUploadObserver : IInitializable, IDisposable
     private long _armedRunId;
     private TaskCompletionSource<BeatLeaderUploadResult>? _completionSource;
 
+    internal bool UsesLegacyObserver { get; private set; }
+
     public void Initialize()
     {
         try
@@ -60,6 +62,7 @@ internal sealed class BeatLeaderUploadObserver : IInitializable, IDisposable
             _eventInfo.EventHandlerType,
             nameof(HandleModernStateChanged));
         _eventInfo.AddEventHandler(null, _eventHandler);
+        UsesLegacyObserver = false;
         Plugin.Log.Info("[PP] BeatLeader modern upload observer attached.");
         return true;
     }
@@ -87,6 +90,7 @@ internal sealed class BeatLeaderUploadObserver : IInitializable, IDisposable
             delegateType,
             nameof(HandleLegacyStateChanged));
         addListenerMethod.Invoke(null, new object[] { _eventHandler });
+        UsesLegacyObserver = true;
         Plugin.Log.Info("[PP] BeatLeader 0.9.x upload observer attached.");
         return true;
     }
@@ -185,13 +189,19 @@ internal sealed class BeatLeaderUploadObserver : IInitializable, IDisposable
         }
 
         TaskCompletionSource<BeatLeaderUploadResult>? completionSource;
+        long runId;
         lock (_sync)
         {
             if (_armedRunId == 0 || _completionSource == null) return;
+            runId = _armedRunId;
             completionSource = _completionSource;
             _armedRunId = 0;
             _completionSource = null;
         }
+
+        Plugin.Log.Info(
+            $"[PP] BeatLeader upload observer completed run {runId}: " +
+            $"state={stateName}, status={status}, detail={detail ?? "<none>"}.");
 
         completionSource.TrySetResult(new BeatLeaderUploadResult
         {
@@ -227,6 +237,7 @@ internal sealed class BeatLeaderUploadObserver : IInitializable, IDisposable
             _completionSource?.TrySetCanceled();
             _completionSource = null;
             _armedRunId = 0;
+            UsesLegacyObserver = false;
         }
     }
 }

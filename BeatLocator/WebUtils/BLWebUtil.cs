@@ -89,7 +89,7 @@ internal static class BLWebUtil
         {
             var uri =
                 GetBeatLeaderApiUrl() + $"/player/{Uri.EscapeDataString(userId)}/scores?sortBy=date&order=desc" +
-                $"&page=1&count={playNumber}";
+                $"&page=1&count={playNumber}&type=ranked";
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
             request.Headers.TryAddWithoutValidation("Accept", "text/plain");
 
@@ -106,7 +106,12 @@ internal static class BLWebUtil
 
             var result = JsonConvert.DeserializeObject<ScoresResponse>(responseBody);
 
-            if (result != null && result.Data != null && result.Data.Count != 0) return result.Data;
+            if (result?.Data != null)
+            {
+                Plugin.Log.Info(
+                    $"BeatLeader profile scan loaded {result.Data.Count} ranked play(s).");
+                return result.Data;
+            }
             
             Plugin.Log.Error($"Error parsing the BL's response: {responseBody}");
             return null;

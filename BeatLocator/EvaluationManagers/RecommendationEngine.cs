@@ -347,7 +347,7 @@ internal static class RecommendationEngine
         if (samples.Length < 5)
         {
             throw new ArgumentException(
-                "At least five valid plays are required.",
+                "At least five cleared ranked plays with star ratings are required.",
                 nameof(source));
         }
 

@@ -31,8 +31,9 @@ internal class MenuInstaller : Installer
             .FromNewComponentAsViewController()
             .AsSingle();
 
-        // These bindings stay lazy through LazyInject in the flow coordinator;
-        // provider BSML is not created until that provider is actually opened.
+        // All BeatLocator view controllers stay lazy through LazyInject in the flow
+        // coordinator. Startup registers only the menu entry and lightweight flow;
+        // BSML controllers are created when BeatLocator or a post-level screen opens.
         Container.Bind<BeatLeaderSelect>()
             .FromNewComponentAsViewController()
             .AsSingle();

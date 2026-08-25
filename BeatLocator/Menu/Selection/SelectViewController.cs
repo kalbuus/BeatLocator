@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.IO;
 using BeatSaberMarkupLanguage.Attributes;
 using BeatSaberMarkupLanguage.Components;
 using BeatSaberMarkupLanguage.ViewControllers;
@@ -74,8 +73,8 @@ public class SelectViewController : BSMLAutomaticViewController
     [UIAction("#post-parse")]
     private void PostParse()
     {
-        _nineSliceSprite ??= LoadSprite(NineSliceResource);
-        _exitIconSprite ??= LoadSprite(ExitIconResource);
+        _nineSliceSprite ??= RankingSelectViewSupport.LoadSprite(NineSliceResource);
+        _exitIconSprite ??= RankingSelectViewSupport.LoadSprite(ExitIconResource);
         var exitVisual = _exitButton.gameObject
             .AddComponent<ExitButtonVisual>();
         exitVisual.Initialize(
@@ -235,31 +234,4 @@ public class SelectViewController : BSMLAutomaticViewController
         _flowCoordinator.Exit();
     }
 
-    private static Sprite LoadSprite(string resourceName)
-    {
-        using var stream = typeof(SelectViewController).Assembly
-            .GetManifestResourceStream(resourceName)
-            ?? throw new InvalidOperationException(
-                $"Embedded image '{resourceName}' was not found.");
-        using var buffer = new MemoryStream();
-        stream.CopyTo(buffer);
-
-        var texture = new Texture2D(
-            2,
-            2,
-            TextureFormat.RGBA32,
-            false);
-        if (!texture.LoadImage(buffer.ToArray()))
-        {
-            UnityEngine.Object.Destroy(texture);
-            throw new InvalidOperationException(
-                $"Could not load image '{resourceName}'.");
-        }
-
-        return Sprite.Create(
-            texture,
-            new Rect(0, 0, texture.width, texture.height),
-            new Vector2(0.5f, 0.5f),
-            100f);
-    }
 }

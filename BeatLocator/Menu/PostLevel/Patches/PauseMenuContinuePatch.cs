@@ -12,6 +12,8 @@ namespace BeatLocator.Menu;
 [HarmonyPatch(typeof(PauseMenuManager), "MenuButtonPressed")]
 internal static class PauseMenuContinuePatch
 {
+    private static readonly FieldInfo? InitDataField =
+        AccessTools.Field(typeof(PauseMenuManager), "_initData");
     private static bool _releaseVanillaMenu;
     private static bool _fadeInProgress;
 
@@ -27,8 +29,17 @@ internal static class PauseMenuContinuePatch
         }
 
         if (_fadeInProgress) return false;
-        if (RoulettePlaySessionManager.Instance?.HasActiveRun() != true)
+
+        var sessionManager = RoulettePlaySessionManager.Instance;
+        var initData = InitDataField?.GetValue(__instance) as PauseMenuManager.InitData;
+        if (sessionManager == null ||
+            initData == null ||
+            !sessionManager.MatchesActive(initData.beatmapKey))
         {
+            if (sessionManager != null && initData != null)
+            {
+                sessionManager.CancelIfActiveRunDoesNotMatch(initData.beatmapKey);
+            }
             return true;
         }
 

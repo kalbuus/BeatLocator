@@ -10,6 +10,7 @@ namespace BeatLocator.PostLevel;
 /// </summary>
 internal sealed class RouletteLevelCompletionTracker : IInitializable, IDisposable
 {
+    private static readonly TimeSpan MaximumPpResolutionTime = TimeSpan.FromSeconds(140);
     private readonly StandardLevelScenesTransitionSetupDataSO _transitionSetup;
     private readonly RoulettePlaySessionManager _sessionManager;
     private readonly PostLevelPpResolver _ppResolver;
@@ -36,7 +37,11 @@ internal sealed class RouletteLevelCompletionTracker : IInitializable, IDisposab
         StandardLevelScenesTransitionSetupDataSO transition,
         LevelCompletionResults results)
     {
-        if (!_sessionManager.MatchesActive(transition.beatmapKey)) return;
+        if (!_sessionManager.MatchesActive(transition.beatmapKey))
+        {
+            _sessionManager.CancelIfActiveRunDoesNotMatch(transition.beatmapKey);
+            return;
+        }
 
         var session = _sessionManager.TryClaim(transition.beatmapKey);
         if (session == null) return;
@@ -59,6 +64,15 @@ internal sealed class RouletteLevelCompletionTracker : IInitializable, IDisposab
         {
             Plugin.Log.Info($"[PP] Run {session.RunId}: restart requested; rearming the same map.");
             _sessionManager.RearmAfterRestart(session);
+            return;
+        }
+
+        if (!_uiState.ConfirmCompletion(session))
+        {
+            Plugin.Log.Warn(
+                $"[PP] Run {session.RunId} completed, but its UI state is no longer active; " +
+                "leaving the vanilla results flow untouched.");
+            _sessionManager.Release(session.RunId);
             return;
         }
 
@@ -114,6 +128,7 @@ internal sealed class RouletteLevelCompletionTracker : IInitializable, IDisposab
             return;
         }
 
+        session.CancellationSource.CancelAfter(MaximumPpResolutionTime);
         ResolveAndLogAsync(session, results);
     }
 

@@ -1,4 +1,5 @@
-<vertical ignore-layout="true"
+<vertical id="terminal-root"
+          ignore-layout="true"
           anchor-pos-y="8"
           child-control-width="true"
           child-control-height="true"

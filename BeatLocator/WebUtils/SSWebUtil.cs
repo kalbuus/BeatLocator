@@ -21,6 +21,8 @@ internal static class SSWebUtil
     private const int MaximumApiPageSize = 100;
     private const int BeatSaverBatchSize = 50;
     private const int MaximumPlayedScorePages = 3;
+    private const int MaximumProfileRecentScorePages = 3;
+    private const int MaximumProfileTopScorePages = 3;
     private const int ScoreCheckRetryCount = 2;
     private const int ScoreCheckSpacingMilliseconds = 250;
     private const int PostLevelScorePollMilliseconds = 1500;
@@ -309,42 +311,40 @@ internal static class SSWebUtil
 
             UserId = userInfo.platformUserId;
             var limit = Math.Min(Math.Max(playNumber, 1), MaximumApiPageSize);
-            var uri = ScoreSaberApiBaseUrl +
-                      $"/players/{Uri.EscapeDataString(UserId)}/scores?page=1&limit={limit}&sort=recent";
-            var response = await GetJsonAsync<ScoreSaberScoresResponse>(uri, cancellationToken);
-            var scores = new List<PlayerScoreEntry>();
+            var scores = new List<PlayerScoreEntry>(playNumber);
+            var seenScoreIds = new HashSet<long>();
+            var recentScan = await AppendProfileScorePagesAsync(
+                UserId,
+                "recent",
+                limit,
+                MaximumProfileRecentScorePages,
+                playNumber,
+                scores,
+                seenScoreIds,
+                cancellationToken);
+            var topScan = default(ProfileScorePageScan);
 
-            foreach (var entry in response.Data ?? Enumerable.Empty<ScoreSaberScoreEntry>())
+            // ScoreSaber has no ranked-only player score filter. If ordinary saved
+            // plays fill the recent pages, its PP ordering is a bounded way to reach
+            // ranked scores without walking an arbitrarily large account history.
+            if (scores.Count < playNumber && recentScan.HasMorePages)
             {
-                var stars = entry.Leaderboard?.Realm?.Stars;
-                var score = entry.Score;
-                if (!stars.HasValue || stars.Value <= 0f ||
-                    score == null ||
-                    !string.Equals(score.PlayOutcome, "CLEAR", StringComparison.OrdinalIgnoreCase) ||
-                    !DateTimeOffset.TryParse(
-                        score.CreatedAt,
-                        CultureInfo.InvariantCulture,
-                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-                        out var playedAt))
-                {
-                    continue;
-                }
-
-                scores.Add(new PlayerScoreEntry
-                {
-                    Accuracy = score.Accuracy,
-                    Timepost = checked((int)playedAt.ToUnixTimeSeconds()),
-                    Leaderboard = new ScoreLeaderboard
-                    {
-                        Difficulty = new ScoreDifficulty
-                        {
-                            Stars = stars.Value
-                        }
-                    }
-                });
+                topScan = await AppendProfileScorePagesAsync(
+                    UserId,
+                    "top",
+                    limit,
+                    MaximumProfileTopScorePages,
+                    playNumber,
+                    scores,
+                    seenScoreIds,
+                    cancellationToken);
             }
 
-            return scores.Count == 0 ? null : scores;
+            Plugin.Log.Info(
+                $"ScoreSaber profile scan loaded {scores.Count} cleared ranked play(s) " +
+                $"after inspecting {recentScan.Entries + topScan.Entries} score(s) on " +
+                $"{recentScan.Pages} recent page(s) and {topScan.Pages} top page(s).");
+            return scores;
         }
         catch (OperationCanceledException)
         {
@@ -355,6 +355,86 @@ internal static class SSWebUtil
             Plugin.Log.Error($"Could not request ScoreSaber scores: {exception}");
             return null;
         }
+    }
+
+    private static async Task<ProfileScorePageScan> AppendProfileScorePagesAsync(
+        string playerId,
+        string sort,
+        int limit,
+        int maximumPages,
+        int targetScoreCount,
+        ICollection<PlayerScoreEntry> scores,
+        ISet<long> seenScoreIds,
+        CancellationToken cancellationToken)
+    {
+        var pages = 0;
+        var inspectedEntries = 0;
+        var hasMorePages = false;
+
+        for (var page = 1; page <= maximumPages && scores.Count < targetScoreCount; page++)
+        {
+            var response = await FetchPlayerScorePageAsync(
+                playerId,
+                page,
+                limit,
+                cancellationToken,
+                sort);
+            pages++;
+
+            var entries = response.Data ?? new List<ScoreSaberScoreEntry>();
+            inspectedEntries += entries.Count;
+            foreach (var entry in entries)
+            {
+                if (scores.Count >= targetScoreCount) break;
+                if (!TryCreateProfileScore(entry, out var profileScore)) continue;
+
+                var scoreId = entry.Score?.Id ?? 0;
+                if (scoreId != 0 && !seenScoreIds.Add(scoreId)) continue;
+                scores.Add(profileScore);
+            }
+
+            var totalPages = response.Metadata?.TotalPages ?? 0;
+            hasMorePages = totalPages > 0
+                ? page < totalPages
+                : entries.Count >= limit;
+            if (!hasMorePages) break;
+        }
+
+        return new ProfileScorePageScan(pages, inspectedEntries, hasMorePages);
+    }
+
+    private static bool TryCreateProfileScore(
+        ScoreSaberScoreEntry entry,
+        out PlayerScoreEntry profileScore)
+    {
+        profileScore = null!;
+        var stars = entry.Leaderboard?.Realm?.Stars;
+        var score = entry.Score;
+        if (!stars.HasValue || stars.Value <= 0f ||
+            score == null ||
+            !string.Equals(score.PlayOutcome, "CLEAR", StringComparison.OrdinalIgnoreCase) ||
+            !DateTimeOffset.TryParse(
+                score.CreatedAt,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out var playedAt))
+        {
+            return false;
+        }
+
+        profileScore = new PlayerScoreEntry
+        {
+            Accuracy = score.Accuracy,
+            Timepost = checked((int)playedAt.ToUnixTimeSeconds()),
+            Leaderboard = new ScoreLeaderboard
+            {
+                Difficulty = new ScoreDifficulty
+                {
+                    Stars = stars.Value
+                }
+            }
+        };
+        return true;
     }
 
     internal static async Task<List<RecommendationMap>?> FindMapAsync(
@@ -570,11 +650,12 @@ internal static class SSWebUtil
         string playerId,
         int page,
         int limit,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string sort = "recent")
     {
         var uri = ScoreSaberApiBaseUrl +
-                  $"/players/{Uri.EscapeDataString(playerId)}/scores" +
-                  $"?page={page}&limit={limit}&sort=recent";
+                   $"/players/{Uri.EscapeDataString(playerId)}/scores" +
+                   $"?page={page}&limit={limit}&sort={Uri.EscapeDataString(sort)}";
         return GetJsonAsync<ScoreSaberScoresResponse>(uri, cancellationToken);
     }
 
@@ -1081,6 +1162,20 @@ internal static class SSWebUtil
 
         [JsonProperty("totalPages")]
         public int TotalPages { get; set; }
+    }
+
+    private readonly struct ProfileScorePageScan
+    {
+        internal ProfileScorePageScan(int pages, int entries, bool hasMorePages)
+        {
+            Pages = pages;
+            Entries = entries;
+            HasMorePages = hasMorePages;
+        }
+
+        internal int Pages { get; }
+        internal int Entries { get; }
+        internal bool HasMorePages { get; }
     }
 
     private sealed class BeatSaverMapDetail

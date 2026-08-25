@@ -33,18 +33,20 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     private const float PostLevelRevealDurationSeconds = 0.15f;
     private const int FailedSoloSettleDelayMilliseconds = 450;
     private const int FailedTerminalWatchdogMilliseconds = 3000;
+    private const int MainFlowStabilityTimeoutMilliseconds = 5000;
+    private const int MainFlowSwitchTimeoutMilliseconds = 10000;
 
     private MainFlowCoordinator _mainFlowCoordinator = null!;
     private SoloFreePlayFlowCoordinator _soloFreePlayFlowCoordinator = null!;
     private IPlatformUserModel _platformUserModel = null!;
-    private SelectViewController _selectViewController = null!;
+    private LazyInject<SelectViewController> _selectViewController = null!;
     private LazyInject<BeatLeaderSelect> _beatLeaderSelect = null!;
     private LazyInject<ScoreSaberSelect> _scoreSaberSelect = null!;
     private ViewController? _activeRankingSelect;
-    private RouletteAnimationViewController _rouletteAnimationViewController = null!;
-    private PpResultViewController _ppResultViewController = null!;
-    private PostLevelLoadingViewController _postLevelLoadingViewController = null!;
-    private PostLevelTerminalViewController _postLevelTerminalViewController = null!;
+    private LazyInject<RouletteAnimationViewController> _rouletteAnimationViewController = null!;
+    private LazyInject<PpResultViewController> _ppResultViewController = null!;
+    private LazyInject<PostLevelLoadingViewController> _postLevelLoadingViewController = null!;
+    private LazyInject<PostLevelTerminalViewController> _postLevelTerminalViewController = null!;
     private SimpleDialogPromptViewController _popupViewController = null!;
     private readonly Queue<PopupRequest> _popupQueue = new Queue<PopupRequest>();
     private bool _popupPresented;
@@ -62,6 +64,8 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     private bool _nextSearchFromPostLevel;
     private PostLevelDisplayResult? _pendingPostLevelResult;
     private EvaluatedDifficulty? _postLevelRetrySelection;
+    private bool _mainFlowSwitchInProgress;
+    private int _mainFlowSwitchGeneration;
     private static BeatLocatorFlowCoordinator? _activeInstance;
 
     [Inject]
@@ -69,13 +73,13 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         MainFlowCoordinator mainFlowCoordinator,
         SoloFreePlayFlowCoordinator soloFreePlayFlowCoordinator,
         IPlatformUserModel platformUserModel,
-        SelectViewController selectViewController,
+        LazyInject<SelectViewController> selectViewController,
         LazyInject<BeatLeaderSelect> beatLeaderSelect,
         LazyInject<ScoreSaberSelect> scoreSaberSelect,
-        RouletteAnimationViewController rouletteAnimationViewController,
-        PpResultViewController ppResultViewController,
-        PostLevelLoadingViewController postLevelLoadingViewController,
-        PostLevelTerminalViewController postLevelTerminalViewController,
+        LazyInject<RouletteAnimationViewController> rouletteAnimationViewController,
+        LazyInject<PpResultViewController> ppResultViewController,
+        LazyInject<PostLevelLoadingViewController> postLevelLoadingViewController,
+        LazyInject<PostLevelTerminalViewController> postLevelTerminalViewController,
         SimpleDialogPromptViewController popupViewController,
         PluginConfig config,
         RoulettePlaySessionManager playSessionManager)
@@ -106,6 +110,22 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     internal void Present()
     {
+        if (ReferenceEquals(_mainFlowCoordinator.childFlowCoordinator, this))
+        {
+            Plugin.Log.Warn("BeatLocator flow is already presented.");
+            return;
+        }
+
+        if (_mainFlowCoordinator.childFlowCoordinator != null ||
+            _mainFlowCoordinator.isInTransition ||
+            _mainFlowSwitchInProgress)
+        {
+            Plugin.Log.Warn(
+                "BeatLocator flow was not presented because another main-menu flow " +
+                "or transition currently owns the ScreenSystem.");
+            return;
+        }
+
         _mainFlowCoordinator.PresentFlowCoordinator(
             this,
             null,
@@ -160,77 +180,82 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         TryShowPendingPostLevelResult();
     }
 
-    internal void PresentPostLevelLoading(long runId, RankingProvider provider)
+    internal async Task<bool> PresentPostLevelLoadingAsync(
+        long runId,
+        RankingProvider provider)
     {
         if (_postLevelPresentationInProgress || _postLevelFlowReady)
         {
             Plugin.Log.Warn("A BeatLocator post-level screen transition is already in progress.");
             FadeInAfterPostLevelTransition();
-            return;
+            return false;
         }
 
         _rankingProvider = provider;
-        _postLevelLoadingViewController.SetMessage("CALCULATING PP");
+        var loadingViewController = _postLevelLoadingViewController.Value;
+        loadingViewController.SetMessage("CALCULATING PP");
         _postLevelPresentationInProgress = true;
         Plugin.Log.Info($"[PP UI] Opening loading screen for run {runId}.");
-        PresentPostLevelLoadingAfterVanillaContinue();
+        return await PresentPostLevelLoadingAfterVanillaContinueAsync();
     }
 
-    private void PresentPostLevelLoadingAfterVanillaContinue()
+    private async Task<bool> PresentPostLevelLoadingAfterVanillaContinueAsync()
     {
+        var loadingViewController = _postLevelLoadingViewController.Value;
         try
         {
-            Plugin.Log.Info("[PP UI] Dismissing the stable Solo flow.");
-            _mainFlowCoordinator.DismissFlowCoordinator(
+            var switched = await SwitchMainChildFlowAsync(
                 _soloFreePlayFlowCoordinator,
-                ViewController.AnimationDirection.Horizontal,
+                this,
                 () =>
                 {
-                    Plugin.Log.Info("[PP UI] Solo flow dismissed; presenting BeatLocator flow.");
-                    _mainFlowCoordinator.PresentFlowCoordinator(
-                        this,
+                    Plugin.Log.Info("[PP UI] BeatLocator flow presented; activating loading view.");
+                    _activeRankingSelect = null;
+                    ReplaceTopViewController(
+                        loadingViewController,
                         () =>
                         {
-                            Plugin.Log.Info("[PP UI] BeatLocator flow presented; activating loading view.");
-                            _activeRankingSelect = null;
-                            ReplaceTopViewController(
-                                _postLevelLoadingViewController,
-                                () =>
-                                {
-                                    Plugin.Log.Info("[PP UI] Loading view is active.");
-                                    _postLevelPresentationInProgress = false;
-                                    _postLevelFlowReady = true;
-                                    FadeInAfterPostLevelTransition();
-                                    TryShowPendingPostLevelResult();
-                                },
-                                ViewController.AnimationType.None,
-                                ViewController.AnimationDirection.Horizontal);
+                            Plugin.Log.Info("[PP UI] Loading view is active.");
+                            _postLevelPresentationInProgress = false;
+                            _postLevelFlowReady = true;
+                            FadeInAfterPostLevelTransition();
+                            TryShowPendingPostLevelResult();
                         },
-                        ViewController.AnimationDirection.Horizontal,
-                        false);
+                        ViewController.AnimationType.None,
+                        ViewController.AnimationDirection.Horizontal);
                 },
-                false);
+                "post-level loading");
+            if (!switched)
+            {
+                _postLevelPresentationInProgress = false;
+                _postLevelFlowReady = false;
+                FadeInAfterPostLevelTransition();
+                return false;
+            }
+            return true;
         }
         catch (Exception exception)
         {
             _postLevelPresentationInProgress = false;
             FadeInAfterPostLevelTransition();
             Plugin.Log.Error($"[PP UI] Could not open the loading screen: {exception}");
+            return false;
         }
     }
 
-    internal void PresentPostLevelTerminal(PostLevelTerminalResult result)
+    internal async Task<bool> PresentPostLevelTerminalAsync(PostLevelTerminalResult result)
     {
         if (_postLevelPresentationInProgress || _postLevelFlowReady)
         {
             Plugin.Log.Warn("A BeatLocator post-level screen transition is already in progress.");
             FadeInAfterPostLevelTransition();
-            return;
+            return false;
         }
 
         _rankingProvider = result.Provider;
         _postLevelRetrySelection = result.Selection;
-        _postLevelTerminalViewController.SetLevelFailed(result.LevelFailed);
+        var terminalViewController = _postLevelTerminalViewController.Value;
+        terminalViewController.SetLevelFailed(result.LevelFailed);
         _postLevelPresentationInProgress = true;
         Plugin.Log.Info(
             $"[PP UI] Opening {(result.LevelFailed ? "failed" : "quit")} screen " +
@@ -238,42 +263,42 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
         try
         {
-            _mainFlowCoordinator.DismissFlowCoordinator(
+            var switched = await SwitchMainChildFlowAsync(
                 _soloFreePlayFlowCoordinator,
-                ViewController.AnimationDirection.Horizontal,
+                this,
                 () =>
                 {
                     Plugin.Log.Info(
-                        "[PP UI] Solo flow dismissed for terminal; presenting BeatLocator flow.");
-                    _mainFlowCoordinator.PresentFlowCoordinator(
-                        this,
+                        "[PP UI] BeatLocator flow presented; activating terminal view.");
+                    _activeRankingSelect = null;
+                    ReplaceTopViewController(
+                        terminalViewController,
                         () =>
                         {
-                            Plugin.Log.Info(
-                                "[PP UI] BeatLocator flow presented; activating terminal view.");
-                            _activeRankingSelect = null;
-                            ReplaceTopViewController(
-                                _postLevelTerminalViewController,
-                                () =>
-                                {
-                                    Plugin.Log.Info("[PP UI] Terminal view is active; removing black.");
-                                    _postLevelPresentationInProgress = false;
-                                    _postLevelFlowReady = true;
-                                    FadeInAfterPostLevelTransition();
-                                },
-                                ViewController.AnimationType.None,
-                                ViewController.AnimationDirection.Horizontal);
+                            Plugin.Log.Info("[PP UI] Terminal view is active; removing black.");
+                            _postLevelPresentationInProgress = false;
+                            _postLevelFlowReady = true;
+                            FadeInAfterPostLevelTransition();
                         },
-                        ViewController.AnimationDirection.Horizontal,
-                        false);
+                        ViewController.AnimationType.None,
+                        ViewController.AnimationDirection.Horizontal);
                 },
-                false);
+                "post-level terminal");
+            if (!switched)
+            {
+                _postLevelPresentationInProgress = false;
+                _postLevelFlowReady = false;
+                FadeInAfterPostLevelTransition();
+                return false;
+            }
+            return true;
         }
         catch (Exception exception)
         {
             _postLevelPresentationInProgress = false;
             FadeInAfterPostLevelTransition();
             Plugin.Log.Error($"[PP UI] Could not open the failed/quit screen: {exception}");
+            return false;
         }
     }
 
@@ -409,7 +434,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         Plugin.Log.Info(
             $"[PP UI] Black screen is holding; presenting failed terminal for run " +
             $"{terminal.RunId} through the standard post-level flow.");
-        PresentPostLevelTerminal(terminal);
+        await PresentPostLevelTerminalAsync(terminal);
         await Task.Delay(FailedTerminalWatchdogMilliseconds);
         if (IsPostLevelFadeActive)
         {
@@ -463,7 +488,8 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         _postLevelFlowReady = true;
         _postLevelPresentationInProgress = true;
         _pendingPostLevelResult = null;
-        _ppResultViewController.SetResult(new PostLevelDisplayResult
+        var resultViewController = _ppResultViewController.Value;
+        resultViewController.SetResult(new PostLevelDisplayResult
         {
             RunId = -1,
             Provider = RankingProvider.BeatLeader,
@@ -477,7 +503,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         });
         Plugin.Log.Info("[PP UI] Showing simulated completed-level result.");
         ReplaceTopViewController(
-            _ppResultViewController,
+            resultViewController,
             () => _postLevelPresentationInProgress = false,
             ViewController.AnimationType.In,
             ViewController.AnimationDirection.Horizontal);
@@ -494,10 +520,11 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
         var result = _pendingPostLevelResult;
         _pendingPostLevelResult = null;
-        _ppResultViewController.SetResult(result);
+        var resultViewController = _ppResultViewController.Value;
+        resultViewController.SetResult(result);
         _postLevelPresentationInProgress = true;
         ReplaceTopViewController(
-            _ppResultViewController,
+            resultViewController,
             () => _postLevelPresentationInProgress = false,
             ViewController.AnimationType.In,
             ViewController.AnimationDirection.Horizontal);
@@ -507,9 +534,10 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     {
         _postLevelFlowReady = false;
         _nextSearchFromPostLevel = true;
-        _postLevelLoadingViewController.SetMessage("FINDING NEXT SONG");
+        var loadingViewController = _postLevelLoadingViewController.Value;
+        loadingViewController.SetMessage("FINDING NEXT SONG");
         ReplaceTopViewController(
-            _postLevelLoadingViewController,
+            loadingViewController,
             RepeatLastSearch,
             ViewController.AnimationType.In,
             ViewController.AnimationDirection.Horizontal);
@@ -525,9 +553,10 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         }
 
         _postLevelFlowReady = false;
-        _postLevelLoadingViewController.SetMessage("LOADING LEVEL");
+        var loadingViewController = _postLevelLoadingViewController.Value;
+        loadingViewController.SetMessage("LOADING LEVEL");
         ReplaceTopViewController(
-            _postLevelLoadingViewController,
+            loadingViewController,
             () => RetryPostLevelMapAsync(selection),
             ViewController.AnimationType.In,
             ViewController.AnimationDirection.Horizontal);
@@ -558,7 +587,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         _activeRankingSelect = null;
 
         ReplaceTopViewController(
-            _selectViewController,
+            _selectViewController.Value,
             null,
             ViewController.AnimationType.In,
             ViewController.AnimationDirection.Horizontal);
@@ -567,7 +596,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     private void ShowRoulette()
     {
         ReplaceTopViewController(
-            _rouletteAnimationViewController,
+            _rouletteAnimationViewController.Value,
             null,
             ViewController.AnimationType.In,
             ViewController.AnimationDirection.Horizontal);
@@ -659,7 +688,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 return;
             }
 
-            _rouletteAnimationViewController.SetResult(
+            _rouletteAnimationViewController.Value.SetResult(
                 searchResult.SelectedDifficulty,
                 secretDifficulty);
             showRoulette = true;
@@ -826,8 +855,14 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
             await FadeOutBeforeSoloFlowAsync(resolvedLevel);
             _soloFreePlayFlowCoordinator.Setup(state);
-            StopRouletteAndPresentSoloFlow(resolvedLevel, selectedDifficulty);
-            return true;
+            var switched = await StopRouletteAndPresentSoloFlowAsync(
+                resolvedLevel,
+                selectedDifficulty);
+            if (!switched)
+            {
+                FadeBackInAfterLaunchFailure();
+            }
+            return switched;
         }
         catch (Exception exception)
         {
@@ -837,7 +872,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         }
     }
 
-    private void StopRouletteAndPresentSoloFlow(
+    private Task<bool> StopRouletteAndPresentSoloFlowAsync(
         BeatSaberLevelLauncher.ResolvedLevel resolvedLevel,
         EvaluatedDifficulty selectedDifficulty)
     {
@@ -845,14 +880,164 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         _postLevelPresentationInProgress = false;
         _pendingPostLevelResult = null;
         _postLevelRetrySelection = null;
-        _mainFlowCoordinator.DismissFlowCoordinator(
+        return SwitchMainChildFlowAsync(
             this,
-            ViewController.AnimationDirection.Horizontal,
-            () => _mainFlowCoordinator.PresentFlowCoordinator(
-                _soloFreePlayFlowCoordinator,
-                () => SelectDifficultyAndPressPlayAsync(resolvedLevel, selectedDifficulty),
+            _soloFreePlayFlowCoordinator,
+            () => SelectDifficultyAndPressPlayAsync(resolvedLevel, selectedDifficulty),
+            "roulette launch");
+    }
+
+    private async Task<bool> SwitchMainChildFlowAsync(
+        FlowCoordinator expectedCurrent,
+        FlowCoordinator? next,
+        Action? nextPresented,
+        string operation)
+    {
+        if (_mainFlowSwitchInProgress)
+        {
+            Plugin.Log.Error(
+                $"[Flow] Refused {operation}: another BeatLocator main-flow switch is active.");
+            return false;
+        }
+
+        _mainFlowSwitchInProgress = true;
+        var generation = ++_mainFlowSwitchGeneration;
+        try
+        {
+            var stableDeadline = DateTimeOffset.UtcNow.AddMilliseconds(
+                MainFlowStabilityTimeoutMilliseconds);
+            while (_mainFlowCoordinator.isInTransition || expectedCurrent.isInTransition)
+            {
+                if (!ReferenceEquals(
+                        _mainFlowCoordinator.childFlowCoordinator,
+                        expectedCurrent))
+                {
+                    LogUnexpectedMainChild(operation, expectedCurrent);
+                    return false;
+                }
+
+                if (DateTimeOffset.UtcNow >= stableDeadline)
+                {
+                    Plugin.Log.Error(
+                        $"[Flow] Refused {operation}: the current main flow did not " +
+                        $"finish its transition within " +
+                        $"{MainFlowStabilityTimeoutMilliseconds / 1000:0} seconds.");
+                    return false;
+                }
+
+                await Task.Yield();
+            }
+
+            if (!ReferenceEquals(
+                    _mainFlowCoordinator.childFlowCoordinator,
+                    expectedCurrent) ||
+                !expectedCurrent.isActivated)
+            {
+                LogUnexpectedMainChild(operation, expectedCurrent);
+                return false;
+            }
+
+            var completionSource = new TaskCompletionSource<bool>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            Plugin.Log.Info(
+                $"[Flow] Switching main child for {operation}: " +
+                $"{expectedCurrent.GetType().Name} -> " +
+                $"{next?.GetType().Name ?? "<main menu>"} (generation {generation}).");
+            _mainFlowCoordinator.DismissFlowCoordinator(
+                expectedCurrent,
                 ViewController.AnimationDirection.Horizontal,
-                false));
+                () =>
+                {
+                    if (generation != _mainFlowSwitchGeneration)
+                    {
+                        completionSource.TrySetResult(false);
+                        return;
+                    }
+
+                    if (_mainFlowCoordinator.childFlowCoordinator != null)
+                    {
+                        Plugin.Log.Error(
+                            $"[Flow] Refused to finish {operation}: another flow took " +
+                            "ownership after the expected child was dismissed.");
+                        completionSource.TrySetResult(false);
+                        return;
+                    }
+
+                    if (next == null)
+                    {
+                        completionSource.TrySetResult(true);
+                        return;
+                    }
+
+                    try
+                    {
+                        _mainFlowCoordinator.PresentFlowCoordinator(
+                            next,
+                            () =>
+                            {
+                                if (generation != _mainFlowSwitchGeneration ||
+                                    !ReferenceEquals(
+                                        _mainFlowCoordinator.childFlowCoordinator,
+                                        next))
+                                {
+                                    completionSource.TrySetResult(false);
+                                    return;
+                                }
+
+                                try
+                                {
+                                    nextPresented?.Invoke();
+                                    completionSource.TrySetResult(true);
+                                }
+                                catch (Exception exception)
+                                {
+                                    completionSource.TrySetException(exception);
+                                }
+                            },
+                            ViewController.AnimationDirection.Horizontal,
+                            false);
+                    }
+                    catch (Exception exception)
+                    {
+                        completionSource.TrySetException(exception);
+                    }
+                },
+                false);
+
+            var timeoutTask = Task.Delay(MainFlowSwitchTimeoutMilliseconds);
+            if (await Task.WhenAny(completionSource.Task, timeoutTask) != completionSource.Task)
+            {
+                _mainFlowSwitchGeneration++;
+                Plugin.Log.Error(
+                    $"[Flow] {operation} did not complete within " +
+                    $"{MainFlowSwitchTimeoutMilliseconds / 1000:0} seconds; " +
+                    "late callbacks will be ignored.");
+                return false;
+            }
+
+            return await completionSource.Task;
+        }
+        catch (Exception exception)
+        {
+            Plugin.Log.Error($"[Flow] Could not complete {operation}: {exception}");
+            return false;
+        }
+        finally
+        {
+            _mainFlowSwitchInProgress = false;
+        }
+    }
+
+    private void LogUnexpectedMainChild(string operation, FlowCoordinator expectedCurrent)
+    {
+        var actual = _mainFlowCoordinator.childFlowCoordinator;
+        Plugin.Log.Error(
+            $"[Flow] Refused {operation}: expected " +
+            $"{expectedCurrent.GetType().Name}, actual " +
+            $"{actual?.GetType().Name ?? "<none>"}, " +
+            $"mainTransition={_mainFlowCoordinator.isInTransition}, " +
+            $"expectedTransition={expectedCurrent.isInTransition}, " +
+            $"expectedActive={expectedCurrent.isActivated}.");
     }
 
     private async void SelectDifficultyAndPressPlayAsync(
@@ -960,12 +1145,13 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                characteristic.StartsWith("360", StringComparison.OrdinalIgnoreCase);
     }
 
-    internal void Exit()
+    internal async void Exit()
     {
-        _mainFlowCoordinator.DismissFlowCoordinator(
+        await SwitchMainChildFlowAsync(
             this,
-            ViewController.AnimationDirection.Horizontal,
-            null);
+            null,
+            null,
+            "BeatLocator menu exit");
     }
 
     protected override void DidActivate(
@@ -975,7 +1161,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     {
         if (firstActivation)
         {
-            ProvideInitialViewControllers(_selectViewController);
+            ProvideInitialViewControllers(_selectViewController.Value);
         }
     }
 
@@ -988,7 +1174,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
             return;
         }
 
-        if (topViewController == _rouletteAnimationViewController)
+        if (topViewController is RouletteAnimationViewController)
         {
             if (!_mapDownloadInProgress)
             {
@@ -997,13 +1183,13 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
             return;
         }
 
-        if (topViewController == _ppResultViewController)
+        if (topViewController is PpResultViewController)
         {
             ShowRankingSelect();
             return;
         }
 
-        if (topViewController == _postLevelLoadingViewController)
+        if (topViewController is PostLevelLoadingViewController)
         {
             if (!_mapSearchInProgress)
             {
@@ -1012,7 +1198,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
             return;
         }
 
-        if (topViewController == _postLevelTerminalViewController)
+        if (topViewController is PostLevelTerminalViewController)
         {
             ShowRankingSelect();
             return;

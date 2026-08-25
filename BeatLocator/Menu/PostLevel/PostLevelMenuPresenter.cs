@@ -22,6 +22,8 @@ internal sealed class PostLevelMenuPresenter : IInitializable, IDisposable
     private readonly BeatLocatorFlowCoordinator _flowCoordinator;
     private bool _continueInterceptInProgress;
     private bool _allowNextVanillaContinue;
+    private bool _quitPresentationWaitInProgress;
+    private bool _disposed;
 
     public PostLevelMenuPresenter(
         ResultsViewController resultsViewController,
@@ -37,6 +39,7 @@ internal sealed class PostLevelMenuPresenter : IInitializable, IDisposable
 
     public void Initialize()
     {
+        _disposed = false;
         ResultsContinuePatch.Register(this);
         _resultsViewController.continueButtonPressedEvent += HandleVanillaContinue;
         _uiState.ReadyChanged += HandleReadyChanged;
@@ -150,7 +153,7 @@ internal sealed class PostLevelMenuPresenter : IInitializable, IDisposable
 
         await fadeTask;
         Plugin.Log.Info("[PP UI] Vanilla Results transition finished.");
-        _flowCoordinator.PresentPostLevelLoading(runId, provider);
+        await _flowCoordinator.PresentPostLevelLoadingAsync(runId, provider);
     }
 
     private void HandleReadyChanged()
@@ -167,12 +170,20 @@ internal sealed class PostLevelMenuPresenter : IInitializable, IDisposable
 
     private void TryPresentReadyResult()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         // Failed Results are advanced by FailedResultsActivationPatch and then
         // claimed by the active flow coordinator. A menu-scoped presenter can
         // disappear during that transition, so it owns only pause-menu Quit.
-        if (_uiState.TryTakeQuitTerminal(out var terminalResult) && terminalResult != null)
+        // Do not claim the pending result until Solo is stable: the presenter
+        // that saw the gameplay completion event belongs to the old menu scope
+        // and is normally disposed while Beat Saber restores the main menu.
+        if (_uiState.HasQuitTerminalForActiveRun())
         {
-            WaitForStableSoloAndPresentTerminal(terminalResult);
+            WaitForStableSoloAndClaimTerminal();
             return;
         }
 
@@ -182,24 +193,35 @@ internal sealed class PostLevelMenuPresenter : IInitializable, IDisposable
         }
     }
 
-    private async void WaitForStableSoloAndPresentTerminal(
-        PostLevelTerminalResult result)
+    private async void WaitForStableSoloAndClaimTerminal()
     {
-        await PresentTerminalWhenSoloStableAsync(result);
+        if (_quitPresentationWaitInProgress || _disposed)
+        {
+            return;
+        }
+
+        _quitPresentationWaitInProgress = true;
+        try
+        {
+            await ClaimAndPresentTerminalWhenSoloStableAsync();
+        }
+        finally
+        {
+            _quitPresentationWaitInProgress = false;
+        }
     }
 
-    private async Task PresentTerminalWhenSoloStableAsync(
-        PostLevelTerminalResult result)
+    private async Task ClaimAndPresentTerminalWhenSoloStableAsync()
     {
         var waitStartedAt = Time.realtimeSinceStartup;
-        while (!IsSoloLevelSelectionReady())
+        while (!_disposed && !IsSoloLevelSelectionReady())
         {
             if (Time.realtimeSinceStartup - waitStartedAt >= SoloActivationTimeoutSeconds)
             {
                 Plugin.Log.Error(
                     $"[PP UI] Solo level-selection navigation did not reactivate within " +
-                    $"{SoloActivationTimeoutSeconds:0.#} seconds after " +
-                    $"run {result.RunId}; failed/quit UI was canceled.");
+                    $"{SoloActivationTimeoutSeconds:0.#} seconds after a pause-menu exit; " +
+                    "the pending BeatLocator screen was left for the next menu scope.");
                 if (_flowCoordinator.IsPostLevelFadeActive)
                 {
                     _flowCoordinator.RecoverStalledPostLevelTransition();
@@ -210,14 +232,24 @@ internal sealed class PostLevelMenuPresenter : IInitializable, IDisposable
             await Task.Yield();
         }
 
+        if (_disposed)
+        {
+            return;
+        }
+
         // Scene activation and the Solo screen transition are separate steps.
         // Let its normal destination settle before replacing the parent flow.
         await Task.Delay(SoloSettleDelayMilliseconds);
-        if (!IsSoloLevelSelectionReady())
+        if (_disposed || !IsSoloLevelSelectionReady())
         {
+            if (_disposed)
+            {
+                return;
+            }
+
             Plugin.Log.Error(
-                $"[PP UI] Solo level-selection navigation became inactive while preparing the " +
-                $"failed/quit screen for run {result.RunId}.");
+                "[PP UI] Solo level-selection navigation became inactive while preparing " +
+                "the pause-menu exit screen.");
             if (_flowCoordinator.IsPostLevelFadeActive)
             {
                 _flowCoordinator.RecoverStalledPostLevelTransition();
@@ -225,8 +257,13 @@ internal sealed class PostLevelMenuPresenter : IInitializable, IDisposable
             return;
         }
 
+        if (!_uiState.TryTakeQuitTerminal(out var result) || result == null)
+        {
+            return;
+        }
+
         await _flowCoordinator.FadeOutForPostLevelTransitionAsync();
-        _flowCoordinator.PresentPostLevelTerminal(result);
+        await _flowCoordinator.PresentPostLevelTerminalAsync(result);
         await Task.Delay(TerminalPresentationWatchdogMilliseconds);
         if (_flowCoordinator.IsPostLevelFadeActive)
         {
@@ -257,6 +294,7 @@ internal sealed class PostLevelMenuPresenter : IInitializable, IDisposable
 
     public void Dispose()
     {
+        _disposed = true;
         ResultsContinuePatch.Unregister(this);
         _resultsViewController.continueButtonPressedEvent -= HandleVanillaContinue;
         _uiState.ReadyChanged -= HandleReadyChanged;

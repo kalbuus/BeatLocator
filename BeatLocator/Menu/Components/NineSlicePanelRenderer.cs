@@ -10,6 +10,8 @@ internal sealed class NineSlicePanelRenderer : MonoBehaviour
     private const float SliceCenterUv = 0.76f;
     private const float SliceCornerUiSize = 1.2f;
     private const float SliceCenterSafetyMargin = 0.04f;
+    private static Sprite? _cachedSliceSource;
+    private static Sprite[] _cachedSliceSprites = Array.Empty<Sprite>();
 
     private RectTransform _root = null!;
     private RectTransform[] _sliceRects = Array.Empty<RectTransform>();
@@ -120,6 +122,7 @@ internal sealed class NineSlicePanelRenderer : MonoBehaviour
                 SliceBorderUv),
             new Rect(farEdge, farEdge, SliceBorderUv, SliceBorderUv)
         };
+        var sliceSprites = GetSliceSprites(source, sliceUvs);
 
         _sliceRects = new RectTransform[sliceUvs.Length];
         _sliceImages = new Image[sliceUvs.Length];
@@ -137,7 +140,7 @@ internal sealed class NineSlicePanelRenderer : MonoBehaviour
 
             var sliceImage = (Image)sliceObject.AddComponent(
                 rendererTemplate.GetType());
-            sliceImage.sprite = CreateSliceSprite(source, sliceUvs[index]);
+            sliceImage.sprite = sliceSprites[index];
             sliceImage.type = Image.Type.Simple;
             sliceImage.preserveAspect = false;
             sliceImage.material = rendererTemplate.material;
@@ -148,6 +151,25 @@ internal sealed class NineSlicePanelRenderer : MonoBehaviour
             _sliceRects[index] = sliceRect;
             _sliceImages[index] = sliceImage;
         }
+    }
+
+    private static Sprite[] GetSliceSprites(Sprite source, Rect[] sliceUvs)
+    {
+        if (_cachedSliceSource == source &&
+            _cachedSliceSprites.Length == sliceUvs.Length)
+        {
+            return _cachedSliceSprites;
+        }
+
+        var sprites = new Sprite[sliceUvs.Length];
+        for (var index = 0; index < sliceUvs.Length; index++)
+        {
+            sprites[index] = CreateSliceSprite(source, sliceUvs[index]);
+        }
+
+        _cachedSliceSource = source;
+        _cachedSliceSprites = sprites;
+        return sprites;
     }
 
     private void RemoveExistingChildren()

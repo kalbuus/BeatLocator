@@ -42,6 +42,7 @@ internal sealed class RoulettePlaySession : IDisposable
         BeatmapKey beatmapKey,
         Task<ProviderPpBaseline?> baselineTask,
         Task<BeatLeaderUploadResult>? beatLeaderUploadTask,
+        bool beatLeaderUploadUsesLegacyObserver,
         CancellationTokenSource cancellationSource)
     {
         RunId = runId;
@@ -50,6 +51,7 @@ internal sealed class RoulettePlaySession : IDisposable
         BeatmapKey = beatmapKey;
         BaselineTask = baselineTask;
         BeatLeaderUploadTask = beatLeaderUploadTask;
+        BeatLeaderUploadUsesLegacyObserver = beatLeaderUploadUsesLegacyObserver;
         CancellationSource = cancellationSource;
         LaunchedAt = DateTimeOffset.UtcNow;
     }
@@ -61,6 +63,7 @@ internal sealed class RoulettePlaySession : IDisposable
     internal DateTimeOffset LaunchedAt { get; }
     internal Task<ProviderPpBaseline?> BaselineTask { get; }
     internal Task<BeatLeaderUploadResult>? BeatLeaderUploadTask { get; }
+    internal bool BeatLeaderUploadUsesLegacyObserver { get; }
     internal CancellationTokenSource CancellationSource { get; }
     internal bool CompletionClaimed { get; set; }
 

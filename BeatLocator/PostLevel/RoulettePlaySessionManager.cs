@@ -52,6 +52,8 @@ internal sealed class RoulettePlaySessionManager
                     selection,
                     cancellationSource.Token),
                 uploadTask,
+                provider == RankingProvider.BeatLeader &&
+                _beatLeaderUploadObserver.UsesLegacyObserver,
                 cancellationSource);
             _current = current;
         }
@@ -86,18 +88,36 @@ internal sealed class RoulettePlaySessionManager
     {
         lock (_sync)
         {
-            return _current != null && KeysMatch(_current.BeatmapKey, beatmapKey);
+            return _current != null &&
+                   !_current.CompletionClaimed &&
+                   DateTimeOffset.UtcNow - _current.LaunchedAt <= MaximumSessionAge &&
+                   KeysMatch(_current.BeatmapKey, beatmapKey);
         }
     }
 
-    internal bool HasActiveRun()
+    internal bool CancelIfActiveRunDoesNotMatch(BeatmapKey beatmapKey)
     {
+        RoulettePlaySession? canceled;
         lock (_sync)
         {
-            return _current != null &&
-                   !_current.CompletionClaimed &&
-                   DateTimeOffset.UtcNow - _current.LaunchedAt <= MaximumSessionAge;
+            if (_current == null ||
+                _current.CompletionClaimed ||
+                KeysMatch(_current.BeatmapKey, beatmapKey))
+            {
+                return false;
+            }
+
+            canceled = _current;
+            _current = null;
         }
+
+        Plugin.Log.Warn(
+            $"[PP] Discarding stale roulette run {canceled.RunId}: " +
+            $"expected {DescribeKey(canceled.BeatmapKey)}, " +
+            $"but the active/completed level is {DescribeKey(beatmapKey)}.");
+        _uiState.Abandon(canceled.RunId);
+        CancelAndDispose(canceled);
+        return true;
     }
 
     internal void RearmAfterRestart(RoulettePlaySession session)

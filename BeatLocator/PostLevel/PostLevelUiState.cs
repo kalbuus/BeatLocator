@@ -33,6 +33,9 @@ internal sealed class PostLevelUiState
     private readonly object _sync = new object();
     private long _activeRunId;
     private RankingProvider _provider;
+    // Arming a launch is not enough to own the next Results screen. The exact
+    // BeatmapKey must first be claimed by RouletteLevelCompletionTracker.
+    private bool _completionConfirmed;
     private bool _vanillaContinuePressed;
     private bool _taken;
     private PostLevelDisplayResult? _result;
@@ -52,7 +55,10 @@ internal sealed class PostLevelUiState
     {
         lock (_sync)
         {
-            return _activeRunId != 0 && !_taken;
+            return _activeRunId != 0 &&
+                   _completionConfirmed &&
+                   _terminalResult == null &&
+                   !_taken;
         }
     }
 
@@ -60,7 +66,20 @@ internal sealed class PostLevelUiState
     {
         lock (_sync)
         {
-            return _activeRunId != 0 && _terminalResult?.LevelFailed == true;
+            return _activeRunId != 0 &&
+                   !_terminalTaken &&
+                   _terminalResult?.LevelFailed == true;
+        }
+    }
+
+    internal bool HasQuitTerminalForActiveRun()
+    {
+        lock (_sync)
+        {
+            return _activeRunId != 0 &&
+                   _completionConfirmed &&
+                   !_terminalTaken &&
+                   _terminalResult?.LevelFailed == false;
         }
     }
 
@@ -70,11 +89,26 @@ internal sealed class PostLevelUiState
         {
             _activeRunId = runId;
             _provider = provider;
+            _completionConfirmed = false;
             _vanillaContinuePressed = false;
             _taken = false;
             _result = null;
             _terminalResult = null;
             _terminalTaken = false;
+        }
+    }
+
+    internal bool ConfirmCompletion(RoulettePlaySession session)
+    {
+        lock (_sync)
+        {
+            if (_activeRunId != session.RunId || _taken)
+            {
+                return false;
+            }
+
+            _completionConfirmed = true;
+            return true;
         }
     }
 
@@ -85,7 +119,10 @@ internal sealed class PostLevelUiState
         var notify = false;
         lock (_sync)
         {
-            if (_activeRunId == 0 || _taken)
+            if (_activeRunId == 0 ||
+                !_completionConfirmed ||
+                _terminalResult != null ||
+                _taken)
             {
                 runId = 0;
                 provider = default;
@@ -109,7 +146,7 @@ internal sealed class PostLevelUiState
         var notify = false;
         lock (_sync)
         {
-            if (_activeRunId != session.RunId || _taken) return;
+            if (_activeRunId != session.RunId || !_completionConfirmed || _taken) return;
             _result = new PostLevelDisplayResult
             {
                 RunId = session.RunId,
@@ -134,7 +171,12 @@ internal sealed class PostLevelUiState
     {
         lock (_sync)
         {
-            if (_activeRunId != session.RunId || _terminalTaken) return;
+            if (_activeRunId != session.RunId ||
+                !_completionConfirmed ||
+                _terminalTaken)
+            {
+                return;
+            }
             _terminalResult = new PostLevelTerminalResult
             {
                 RunId = session.RunId,
@@ -152,6 +194,7 @@ internal sealed class PostLevelUiState
         lock (_sync)
         {
             if (_activeRunId == 0 ||
+                !_completionConfirmed ||
                 !_vanillaContinuePressed ||
                 _result == null ||
                 _taken)
@@ -171,6 +214,7 @@ internal sealed class PostLevelUiState
         lock (_sync)
         {
             if (_activeRunId == 0 ||
+                !_completionConfirmed ||
                 _terminalResult == null ||
                 _terminalTaken)
             {
@@ -179,6 +223,7 @@ internal sealed class PostLevelUiState
             }
 
             _terminalTaken = true;
+            _taken = true;
             result = _terminalResult;
             return true;
         }
@@ -189,6 +234,7 @@ internal sealed class PostLevelUiState
         lock (_sync)
         {
             if (_activeRunId == 0 ||
+                !_completionConfirmed ||
                 _terminalResult == null ||
                 _terminalResult.LevelFailed ||
                 _terminalTaken)
@@ -198,6 +244,7 @@ internal sealed class PostLevelUiState
             }
 
             _terminalTaken = true;
+            _taken = true;
             result = _terminalResult;
             return true;
         }
@@ -209,6 +256,7 @@ internal sealed class PostLevelUiState
         {
             if (_activeRunId != runId) return;
             _activeRunId = 0;
+            _completionConfirmed = false;
             _result = null;
             _terminalResult = null;
             _taken = false;
