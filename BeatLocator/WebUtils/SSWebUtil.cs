@@ -1014,7 +1014,7 @@ internal static class SSWebUtil
     private static HttpClient CreateHttpClient()
     {
         var client = new HttpClient();
-        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BeatLocator/0.0.2");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BeatLocator/0.1.0");
         client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "application/json");
         return client;
     }

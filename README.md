@@ -9,28 +9,48 @@
 </p>
 
 <p align="center">
-  BeatLocator is a recommendation engine for Beat Saber that finds songs based on your BeatLeader profile (ScoreSaber and BeatSaver integrations coming soon).
+  BeatLocator is a recommendation engine for Beat Saber that finds ranked songs based on your BeatLeader or ScoreSaber profile.
 </p>
 
 ---
 
-Be mindful that this is still an alpha version, so interface bugs and crashes might be present. 
-If you find a bug in the latest version of this mod, please report it using [GitHub Issues](https://github.com/kalbuus/BeatLocator/issues)
+If you find a bug or an optimization problem in the latest version of this mod, please report it using [GitHub Issues](https://github.com/kalbuus/BeatLocator/issues)
 
 
 ## Screenshots
+
 <p align="center">
-  <img src="docs/images/beatlocator-settings.png" alt="BeatLocator search settings" width="600">
-  <img src="docs/images/beatlocator-result.png" alt="BeatLocator selected map" width="800">
+  <img src="docs/images/beatlocator-beatleader-settings.png"
+       alt="BeatLocator BeatLeader search settings"
+       width="49%">
+  <img src="docs/images/beatlocator-scoresaber-settings.png"
+       alt="BeatLocator ScoreSaber search settings"
+       width="49%">
 </p>
 
-## Mod Capabilities
+<p align="center">
+  <img src="docs/images/beatlocator-selected-map.png"
+       alt="BeatLocator selected ranked map"
+       width="900">
+</p>
 
-1. Analysis of recent BeatLeader results;
-2. Smart recommendation engine;
-3. Selectable map *difficulty* and *balance* levels;
-4. Map selection animation;
-5. Automatic map loading and launch via BetterSongSearch;
+<p align="center">
+  <img src="docs/images/beatlocator-pp-result.png"
+       alt="BeatLocator post-level PP result"
+       width="650">
+</p>
+
+## Features
+
+- Personalized difficulty estimation based on your ranked BeatLeader or ScoreSaber results;
+- Five skill-relative difficulty presets, from `SUPER EASY` to `END ME`;
+- BeatLeader map-style selection ranging from Tech to Pass;
+- Duration and played-status filters;
+- Two Saber Only and Secret Difficulty modifiers; 
+- Weighted map selection with bounded difficulty fallback;
+- One-button map download through BetterSongSearch and launch of the exact selected characteristic and difficulty;
+- Post-level PP tracking for BeatLeader and ScoreSaber;
+- Continuous session support via custom "level failed" and "exit" interfaces.
 
 ## Supported Versions
 
@@ -53,14 +73,39 @@ Currently, support for versions 1.42+ or standalone is not planned.
 
 ### Integration:
 - BeatLeader
+- ScoreSaber
 
-## Algorithm
+## Recommendation Engine
 
-The song selection works by getting your last ranked scores from BeatLeader, evaluating your skill level and then selecting the songs based on your difficulty and balance selection.
+BeatLocator analyzes up to 100 ranked results to build a player-specific difficulty range. It filters available ranked maps using the selected settings and makes a weighted recommendation near the chosen difficulty target. 
+
+BeatLeader recommendations also account for the selected Tech/Pass balance, while ScoreSaber recommendations use overall star difficulty.
+
+[Read the full recommendation algorithm here](algorithm.md)
+
+## Post-Level PP Tracking
+
+Post-level tracking is enabled only for maps launched through BeatLocator.
+Normal Beat Saber sessions keep their original behaviour.
+
+After a cleared level, Beat Saber first displays its normal results screen and submits the score as usual. 
+BeatLocator then waits for the selected ranking service to publish the matching result.
+
+For a new personal best, BeatLocator displays:
+
+- the PP assigned to the submitted score;
+- the actual change in the player's total profile PP.
+
+BeatLeader normally reports the profile change through its score-improvement data. 
+ScoreSaber profile gain is measured by comparing the player's total PP before and after the uploaded score appears.
 
 ## Privacy
 
-This mod doesn't collect or use your BeatLeader's login information (including your auth token). It uses a public API and only routes some requests through BeatLeader's mod.
+This mod does not collect BeatLeader or ScoreSaber login information. 
+ScoreSaber profile/map requests use the public ScoreSaber API and the platform ID already provided by Beat Saber. 
+BeatLeader-only authenticated requests are routed through the installed BeatLeader mod. 
+
+**BeatLocator does not read any tokens or cookies and never will.**
 
 ## Building from Source
 

@@ -276,7 +276,8 @@ internal sealed class PostLevelMenuPresenter : IInitializable, IDisposable
 
     private bool IsSoloLevelSelectionReady()
     {
-        if (!_soloFreePlayFlowCoordinator.gameObject.activeInHierarchy)
+        if (!_soloFreePlayFlowCoordinator.isActivated ||
+            !_soloFreePlayFlowCoordinator.gameObject.activeInHierarchy)
         {
             return false;
         }

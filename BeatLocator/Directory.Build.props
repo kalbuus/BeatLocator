@@ -17,9 +17,11 @@
 
     <!-- Future profiles can override these properties without changing the build scripts. -->
     <BsipaDependencyVersion Condition="'$(BsipaDependencyVersion)' == ''">^4.3.6</BsipaDependencyVersion>
+    <BsmlDependencyVersion Condition="'$(BsmlDependencyVersion)' == ''">^1.12.5</BsmlDependencyVersion>
     <SiraUtilDependencyVersion Condition="'$(SiraUtilDependencyVersion)' == ''">^3.2.1</SiraUtilDependencyVersion>
     <BetterSongSearchDependencyVersion Condition="'$(BetterSongSearchDependencyVersion)' == ''">^0.8.1</BetterSongSearchDependencyVersion>
     <SongCoreDependencyVersion Condition="'$(SongCoreDependencyVersion)' == ''">^3.15.3</SongCoreDependencyVersion>
+    <BsmlDependencyVersion Condition="'$(BeatSaberVersion)' == '1.39.1'">^1.12.4</BsmlDependencyVersion>
     <SiraUtilDependencyVersion Condition="'$(BeatSaberVersion)' == '1.39.1'">^3.1.14</SiraUtilDependencyVersion>
     <SongCoreDependencyVersion Condition="'$(BeatSaberVersion)' == '1.39.1'">^3.14.15</SongCoreDependencyVersion>
 
@@ -29,19 +31,19 @@
     <PluginId>BeatLocator</PluginId>
     <PluginName>BeatLocator</PluginName>
     <Authors>kalbuus</Authors>
-    <Version>0.0.2</Version>
+    <Version>0.1.0</Version>
     <GameVersion>$(BeatSaberVersion)</GameVersion>
     <Description>Finds ranked Beat Saber maps that match your BeatLeader or ScoreSaber profile.</Description>
     <!--<PluginIcon></PluginIcon>-->
     <ProjectSource>https://github.com/kalbuus/BeatLocator</ProjectSource>
-    <!--<ProjectHome></ProjectHome>-->
+    <ProjectHome>https://github.com/kalbuus/BeatLocator</ProjectHome>
     <!--<DonateUrl></DonateUrl>-->
   </PropertyGroup>
 
   <!-- Plugin Dependencies -->
   <ItemGroup>
     <DependsOn Include="BSIPA" Version="$(BsipaDependencyVersion)"/>
-    <DependsOn Include="BeatSaberMarkupLanguage" Version="^1.12.0"/>
+    <DependsOn Include="BeatSaberMarkupLanguage" Version="$(BsmlDependencyVersion)"/>
     <DependsOn Include="SiraUtil" Version="$(SiraUtilDependencyVersion)"/>
     <DependsOn Include="BetterSongSearch" Version="$(BetterSongSearchDependencyVersion)"/>
     <DependsOn Include="SongCore" Version="$(SongCoreDependencyVersion)"/>

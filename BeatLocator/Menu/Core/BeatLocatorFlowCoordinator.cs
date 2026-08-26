@@ -36,6 +36,20 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     private const int MainFlowStabilityTimeoutMilliseconds = 5000;
     private const int MainFlowSwitchTimeoutMilliseconds = 10000;
 
+    private static readonly MethodInfo? ReplaceChildFlowCoordinatorMethod =
+        typeof(FlowCoordinator).GetMethod(
+            "ReplaceChildFlowCoordinator",
+            BindingFlags.NonPublic | BindingFlags.Instance,
+            null,
+            new[]
+            {
+                typeof(FlowCoordinator),
+                typeof(Action),
+                typeof(ViewController.AnimationDirection),
+                typeof(bool)
+            },
+            null);
+
     private MainFlowCoordinator _mainFlowCoordinator = null!;
     private SoloFreePlayFlowCoordinator _soloFreePlayFlowCoordinator = null!;
     private IPlatformUserModel _platformUserModel = null!;
@@ -931,7 +945,10 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         {
             var stableDeadline = DateTimeOffset.UtcNow.AddMilliseconds(
                 MainFlowStabilityTimeoutMilliseconds);
-            while (_mainFlowCoordinator.isInTransition || expectedCurrent.isInTransition)
+            var waitedForActivation = false;
+            while (_mainFlowCoordinator.isInTransition ||
+                   expectedCurrent.isInTransition ||
+                   !expectedCurrent.isActivated)
             {
                 if (!ReferenceEquals(
                         _mainFlowCoordinator.childFlowCoordinator,
@@ -941,16 +958,24 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                     return false;
                 }
 
+                waitedForActivation |= !expectedCurrent.isActivated;
                 if (DateTimeOffset.UtcNow >= stableDeadline)
                 {
                     Plugin.Log.Error(
                         $"[Flow] Refused {operation}: the current main flow did not " +
-                        $"finish its transition within " +
+                        $"become active and stable within " +
                         $"{MainFlowStabilityTimeoutMilliseconds / 1000:0} seconds.");
                     return false;
                 }
 
                 await Task.Yield();
+            }
+
+            if (waitedForActivation)
+            {
+                Plugin.Log.Info(
+                    $"[Flow] {expectedCurrent.GetType().Name} reactivated; " +
+                    $"continuing {operation}.");
             }
 
             if (!ReferenceEquals(
@@ -968,10 +993,19 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 $"[Flow] Switching main child for {operation}: " +
                 $"{expectedCurrent.GetType().Name} -> " +
                 $"{next?.GetType().Name ?? "<main menu>"} (generation {generation}).");
-            _mainFlowCoordinator.DismissFlowCoordinator(
-                expectedCurrent,
-                ViewController.AnimationDirection.Horizontal,
-                () =>
+
+            if (next != null)
+            {
+                if (ReplaceChildFlowCoordinatorMethod == null)
+                {
+                    throw new MissingMethodException(
+                        nameof(FlowCoordinator),
+                        "ReplaceChildFlowCoordinator");
+                }
+
+                Plugin.Log.Info(
+                    $"[Flow] Using atomic child replacement for {operation}.");
+                Action replacementFinished = () =>
                 {
                     if (generation != _mainFlowSwitchGeneration)
                     {
@@ -979,55 +1013,64 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                         return;
                     }
 
-                    if (_mainFlowCoordinator.childFlowCoordinator != null)
+                    if (!ReferenceEquals(
+                            _mainFlowCoordinator.childFlowCoordinator,
+                            next))
                     {
                         Plugin.Log.Error(
-                            $"[Flow] Refused to finish {operation}: another flow took " +
-                            "ownership after the expected child was dismissed.");
+                            $"[Flow] Refused to finish {operation}: the atomic replacement " +
+                            "did not leave the requested child active.");
                         completionSource.TrySetResult(false);
-                        return;
-                    }
-
-                    if (next == null)
-                    {
-                        completionSource.TrySetResult(true);
                         return;
                     }
 
                     try
                     {
-                        _mainFlowCoordinator.PresentFlowCoordinator(
-                            next,
-                            () =>
-                            {
-                                if (generation != _mainFlowSwitchGeneration ||
-                                    !ReferenceEquals(
-                                        _mainFlowCoordinator.childFlowCoordinator,
-                                        next))
-                                {
-                                    completionSource.TrySetResult(false);
-                                    return;
-                                }
-
-                                try
-                                {
-                                    nextPresented?.Invoke();
-                                    completionSource.TrySetResult(true);
-                                }
-                                catch (Exception exception)
-                                {
-                                    completionSource.TrySetException(exception);
-                                }
-                            },
-                            ViewController.AnimationDirection.Horizontal,
-                            false);
+                        nextPresented?.Invoke();
+                        completionSource.TrySetResult(true);
                     }
                     catch (Exception exception)
                     {
                         completionSource.TrySetException(exception);
                     }
-                },
-                false);
+                };
+
+                ReplaceChildFlowCoordinatorMethod.Invoke(
+                    _mainFlowCoordinator,
+                    new object[]
+                    {
+                        next,
+                        replacementFinished,
+                        ViewController.AnimationDirection.Horizontal,
+                        false
+                    });
+            }
+            else
+            {
+                _mainFlowCoordinator.DismissFlowCoordinator(
+                    expectedCurrent,
+                    ViewController.AnimationDirection.Horizontal,
+                    () =>
+                    {
+                        if (generation != _mainFlowSwitchGeneration)
+                        {
+                            completionSource.TrySetResult(false);
+                            return;
+                        }
+
+                        if (_mainFlowCoordinator.childFlowCoordinator != null)
+                        {
+                            Plugin.Log.Error(
+                                $"[Flow] Refused to finish {operation}: another flow took " +
+                                "ownership after the expected child was dismissed.");
+                            completionSource.TrySetResult(false);
+                            return;
+                        }
+
+                        completionSource.TrySetResult(true);
+                    },
+                    false);
+            }
 
             var timeoutTask = Task.Delay(MainFlowSwitchTimeoutMilliseconds);
             if (await Task.WhenAny(completionSource.Task, timeoutTask) != completionSource.Task)
