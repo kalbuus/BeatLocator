@@ -1,9 +1,10 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using BeatSaberMarkupLanguage.Attributes;
 using BeatSaberMarkupLanguage.ViewControllers;
 using BeatLocator.Settings;
-using HMUI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -16,57 +17,60 @@ namespace BeatLocator.Menu;
 /// </summary>
 public sealed class BeatLeaderSelect : BSMLAutomaticViewController
 {
+    [UIComponent("beatleader-menu-root")]
+    private readonly RectTransform _menuRoot = null!;
+    [UIComponent("header-row")]
+    private readonly RectTransform _headerRow = null!;
+    [UIComponent("difficulty-row")]
+    private readonly RectTransform _difficultyRow = null!;
+    [UIComponent("balance-row")]
+    private readonly RectTransform _balanceRow = null!;
+    [UIComponent("duration-row")]
+    private readonly RectTransform _durationRow = null!;
+    [UIComponent("difficulty-label")]
+    private readonly TMP_Text _difficultyLabel = null!;
+    [UIComponent("balance-label")]
+    private readonly TMP_Text _balanceLabel = null!;
+    [UIComponent("duration-label")]
+    private readonly TMP_Text _durationLabel = null!;
+    [UIComponent("difficulty-icon")]
+    private readonly Image _difficultyIcon = null!;
+    [UIComponent("balance-icon")]
+    private readonly Image _balanceIcon = null!;
+    [UIComponent("duration-icon")]
+    private readonly Image _durationIcon = null!;
     [UIComponent("exit-button")]
     private readonly Button _exitButton = null!;
-    [UIComponent("exit-icon")]
-    private readonly Image _exitIcon = null!;
-    [UIComponent("played-toggle-button")]
-    private readonly Button _playedToggleButton = null!;
-    [UIComponent("played-toggle-label")]
-    private readonly TMP_Text _playedToggleLabel = null!;
-    [UIComponent("two-saber-toggle-button")]
-    private readonly Button _twoSaberToggleButton = null!;
-    [UIComponent("two-saber-toggle-label")]
-    private readonly TMP_Text _twoSaberToggleLabel = null!;
-    [UIComponent("secret-toggle-button")]
-    private readonly Button _secretToggleButton = null!;
-    [UIComponent("secret-toggle-label")]
-    private readonly TMP_Text _secretToggleLabel = null!;
-    [UIComponent("difficulty-segments")]
-    private readonly RectTransform _difficultySegments = null!;
-    [UIComponent("difficulty-selection-slider")]
-    private readonly Image _difficultySelectionSliderImage = null!;
-    [UIComponent("balance-segments")]
-    private readonly RectTransform _balanceSegments = null!;
-    [UIComponent("balance-selection-slider")]
-    private readonly Image _balanceSelectionSliderImage = null!;
-    [UIComponent("duration-segments")]
-    private readonly RectTransform _durationSegments = null!;
-    [UIComponent("duration-selection-slider")]
-    private readonly Image _durationSelectionSliderImage = null!;
-    [UIComponent("find-button")]
-    private readonly Button _findButton = null!;
+    [UIComponent("exit-artwork")]
+    private readonly Image _exitArtwork = null!;
+    [UIComponent("difficulty-row-background")]
+    private readonly Image _difficultyRowBackground = null!;
+    [UIComponent("balance-row-background")]
+    private readonly Image _balanceRowBackground = null!;
+    [UIComponent("duration-row-background")]
+    private readonly Image _durationRowBackground = null!;
+    [UIComponent("difficulty-options")]
+    private readonly RectTransform _difficultyOptions = null!;
+    [UIComponent("balance-options")]
+    private readonly RectTransform _balanceOptions = null!;
+    [UIComponent("duration-options")]
+    private readonly RectTransform _durationOptions = null!;
 
     private BeatLocatorFlowCoordinator _flowCoordinator = null!;
     private RankingSearchPreferences _preferences = null!;
-    private Sprite? _nineSliceSprite;
-    private Sprite? _exitIconSprite;
     private int _selectedDifficulty;
     private int _selectedBalance;
     private int _selectedDuration;
     private bool _playedEnabled;
     private bool _twoSaberEnabled;
     private bool _secretEnabled;
-    private bool _searchInProgress;
-    private SegmentSelectionSlider? _difficultySelectionSlider;
-    private SegmentSelectionSlider? _balanceSelectionSlider;
-    private SegmentSelectionSlider? _durationSelectionSlider;
-    private ToggleButtonVisual? _playedToggleVisual;
-    private ToggleButtonVisual? _twoSaberToggleVisual;
-    private ToggleButtonVisual? _secretToggleVisual;
-
-    [UIValue("findButtonText")]
-    public string FindButtonText { get; private set; } = "<b>FIND SOME MAPS!</b>";
+    private bool _visualsInitialized;
+    private SelectionOptionButtonVisual[] _difficultyVisuals =
+        Array.Empty<SelectionOptionButtonVisual>();
+    private SelectionOptionButtonVisual[] _balanceVisuals =
+        Array.Empty<SelectionOptionButtonVisual>();
+    private SelectionOptionButtonVisual[] _durationVisuals =
+        Array.Empty<SelectionOptionButtonVisual>();
 
     [UIValue("difficulties")]
     public List<string> DifficultiesList { get; set; } =
@@ -114,99 +118,87 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
     [UIAction("#post-parse")]
     private void PostParse()
     {
-        _nineSliceSprite ??= RankingSelectViewSupport.LoadSprite(
-            RankingSelectViewSupport.NineSliceResource);
-        _exitIconSprite ??= RankingSelectViewSupport.LoadSprite(
-            RankingSelectViewSupport.ExitIconResource);
-        _difficultySelectionSliderImage.sprite = _nineSliceSprite;
-        _balanceSelectionSliderImage.sprite = _nineSliceSprite;
-        _durationSelectionSliderImage.sprite = _nineSliceSprite;
+        if (_visualsInitialized)
+        {
+            return;
+        }
 
-        var exitVisual = _exitButton.gameObject.AddComponent<ExitButtonVisual>();
-        exitVisual.Initialize(
-            _exitButton,
-            _exitIcon,
-            _nineSliceSprite,
-            _exitIconSprite);
+        var selectedButtonSprite = RankingSelectViewSupport.LoadSprite(
+            RankingSelectViewSupport.SelectedButtonResource);
+        var unselectedButtonSprite = RankingSelectViewSupport.LoadSprite(
+            RankingSelectViewSupport.UnselectedButtonResource);
+        var rowBackgroundSprite = RankingSelectViewSupport.LoadSlicedSprite(
+            RankingSelectViewSupport.SelectionRowBackgroundResource,
+            new Vector4(22f, 20f, 22f, 20f),
+            10f,
+            1.8f);
 
-        _difficultySelectionSlider =
-            _difficultySelectionSliderImage.gameObject
-                .AddComponent<SegmentSelectionSlider>();
-        _difficultySelectionSlider.Initialize(
-            _difficultySegments,
-            _difficultySelectionSliderImage,
-            DifficultiesList.Count,
-            _selectedDifficulty);
-        _difficultySegments.GetComponent<SegmentedControl>()
-            ?.SelectCellWithNumber(_selectedDifficulty);
+        LayoutMenu();
 
-        _balanceSelectionSlider =
-            _balanceSelectionSliderImage.gameObject
-                .AddComponent<SegmentSelectionSlider>();
-        _balanceSelectionSlider.Initialize(
-            _balanceSegments,
-            _balanceSelectionSliderImage,
-            BalancesList.Count,
-            _selectedBalance);
-        _balanceSegments.GetComponent<SegmentedControl>()
-            ?.SelectCellWithNumber(_selectedBalance);
+        _exitArtwork.sprite = RankingSelectViewSupport.LoadSprite(
+            RankingSelectViewSupport.CrossButtonResource);
+        _exitArtwork.preserveAspect = true;
+        StaticSpriteButtonVisual.Initialize(_exitButton, _exitArtwork);
 
-        _durationSelectionSlider =
-            _durationSelectionSliderImage.gameObject
-                .AddComponent<SegmentSelectionSlider>();
-        _durationSelectionSlider.Initialize(
-            _durationSegments,
-            _durationSelectionSliderImage,
-            DurationsList.Count,
-            _selectedDuration);
-        _durationSegments.GetComponent<SegmentedControl>()
-            ?.SelectCellWithNumber(_selectedDuration);
+        InitializeRowBackground(
+            _difficultyRowBackground,
+            rowBackgroundSprite);
+        InitializeRowBackground(
+            _balanceRowBackground,
+            rowBackgroundSprite);
+        InitializeRowBackground(
+            _durationRowBackground,
+            rowBackgroundSprite);
 
-        _playedToggleVisual = CreateToggleVisual(
-            _playedToggleButton,
-            _playedToggleLabel,
-            _playedEnabled);
-        _twoSaberToggleVisual = CreateToggleVisual(
-            _twoSaberToggleButton,
-            _twoSaberToggleLabel,
-            _twoSaberEnabled);
-        _secretToggleVisual = CreateToggleVisual(
-            _secretToggleButton,
-            _secretToggleLabel,
-            _secretEnabled);
+        _difficultyVisuals = InitializeOptionGroup(
+            _difficultyOptions,
+            _selectedDifficulty,
+            OnDifficultySelected,
+            unselectedButtonSprite,
+            selectedButtonSprite);
+        _balanceVisuals = InitializeOptionGroup(
+            _balanceOptions,
+            _selectedBalance,
+            OnBalanceSelected,
+            unselectedButtonSprite,
+            selectedButtonSprite);
+        _durationVisuals = InitializeOptionGroup(
+            _durationOptions,
+            _selectedDuration,
+            OnDurationSelected,
+            unselectedButtonSprite,
+            selectedButtonSprite);
+
+        _visualsInitialized = true;
     }
 
-    [UIAction("difficultySelected")]
-    private void OnDifficultySelected(object segmentedControl, int index)
+    private void OnDifficultySelected(int index)
     {
         _selectedDifficulty = RankingSelectViewSupport.NormalizeSelection(
             index,
             DifficultiesList.Count);
         _preferences.DifficultySelection = _selectedDifficulty;
-        _difficultySelectionSlider?.MoveTo(_selectedDifficulty);
+        ApplySelection(_difficultyVisuals, _selectedDifficulty);
     }
 
-    [UIAction("balanceSelected")]
-    private void OnBalanceSelected(object segmentedControl, int index)
+    private void OnBalanceSelected(int index)
     {
         _selectedBalance = RankingSelectViewSupport.NormalizeSelection(
             index,
             BalancesList.Count);
         _preferences.BalanceSelection = _selectedBalance;
-        _balanceSelectionSlider?.MoveTo(_selectedBalance);
+        ApplySelection(_balanceVisuals, _selectedBalance);
     }
 
-    [UIAction("durationSelected")]
-    private void OnDurationSelected(object segmentedControl, int index)
+    private void OnDurationSelected(int index)
     {
         _selectedDuration = RankingSelectViewSupport.NormalizeSelection(
             index,
             DurationsList.Count);
         _preferences.DurationSelection = (SongDurationFilter)_selectedDuration;
-        _durationSelectionSlider?.MoveTo(_selectedDuration);
+        ApplySelection(_durationVisuals, _selectedDuration);
     }
 
-    [UIAction("find-btn-action")]
     private void OnFindPressed()
     {
         SetSearchInProgress(true);
@@ -226,30 +218,6 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
         OnFindPressed();
     }
 
-    [UIAction("togglePlayed")]
-    private void OnTogglePlayed()
-    {
-        _playedEnabled = !_playedEnabled;
-        _preferences.PlayedEnabled = _playedEnabled;
-        _playedToggleVisual?.SetActive(_playedEnabled);
-    }
-
-    [UIAction("toggleTwoSaber")]
-    private void OnToggleTwoSaber()
-    {
-        _twoSaberEnabled = !_twoSaberEnabled;
-        _preferences.TwoSaberEnabled = _twoSaberEnabled;
-        _twoSaberToggleVisual?.SetActive(_twoSaberEnabled);
-    }
-
-    [UIAction("toggleSecretDifficulty")]
-    private void OnToggleSecretDifficulty()
-    {
-        _secretEnabled = !_secretEnabled;
-        _preferences.SecretDifficultyEnabled = _secretEnabled;
-        _secretToggleVisual?.SetActive(_secretEnabled);
-    }
-
     [UIAction("exitPressed")]
     private void OnExitPressed()
     {
@@ -262,55 +230,255 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
         bool screenSystemEnabling)
     {
         base.DidActivate(firstActivation, addedToHierarchy, screenSystemEnabling);
-        SyncDurationSelection();
-        _findButton.interactable = !_searchInProgress;
+        LayoutMenu();
+        SyncSelections();
         ForceMenuLayoutRebuild();
         StartCoroutine(RebuildMenuLayoutNextFrame());
     }
 
-    private void SyncDurationSelection()
+    private void SyncSelections()
     {
-        var selectedDuration = RankingSelectViewSupport.NormalizeSelection(
+        _selectedDifficulty = RankingSelectViewSupport.NormalizeSelection(
+            _preferences.DifficultySelection,
+            DifficultiesList.Count);
+        _selectedBalance = RankingSelectViewSupport.NormalizeSelection(
+            _preferences.BalanceSelection,
+            BalancesList.Count);
+        _selectedDuration = RankingSelectViewSupport.NormalizeSelection(
             (int)_preferences.DurationSelection,
             DurationsList.Count);
-        if (_selectedDuration == selectedDuration) return;
 
-        _selectedDuration = selectedDuration;
-        _durationSegments.GetComponent<SegmentedControl>()
-            ?.SelectCellWithNumber(_selectedDuration);
-        _durationSelectionSlider?.MoveTo(_selectedDuration);
+        ApplySelection(_difficultyVisuals, _selectedDifficulty);
+        ApplySelection(_balanceVisuals, _selectedBalance);
+        ApplySelection(_durationVisuals, _selectedDuration);
     }
 
     internal void SetSearchInProgress(bool searchInProgress)
     {
-        _searchInProgress = searchInProgress;
-        FindButtonText = searchInProgress
-            ? "<b>LOADING...</b>"
-            : "<b>FIND SOME MAPS!</b>";
-        NotifyPropertyChanged(nameof(FindButtonText));
-        if (_findButton != null)
-        {
-            _findButton.interactable = !searchInProgress;
-        }
+        // The staged concept intentionally has no primary action yet. Keep the
+        // flow hook so post-level navigation can continue using this controller.
     }
 
-    private ToggleButtonVisual CreateToggleVisual(
-        Button button,
-        TMP_Text label,
-        bool active)
+    private static void InitializeRowBackground(
+        Image backgroundImage,
+        Sprite backgroundSprite)
     {
-        return RankingSelectViewSupport.InitializeToggleVisual(
-            button,
-            label,
-            active,
-            _nineSliceSprite!,
-            _difficultySelectionSliderImage);
+        backgroundImage.sprite = backgroundSprite;
+        backgroundImage.raycastTarget = false;
+        var backgroundRect = backgroundImage.rectTransform;
+        backgroundRect.SetAsFirstSibling();
+        backgroundRect.anchorMin = Vector2.zero;
+        backgroundRect.anchorMax = Vector2.one;
+        backgroundRect.pivot = new Vector2(0.5f, 0.5f);
+        backgroundRect.anchoredPosition = Vector2.zero;
+        backgroundRect.offsetMin = Vector2.zero;
+        backgroundRect.offsetMax = Vector2.zero;
+        backgroundRect.localScale = Vector3.one;
+
+        var renderer = backgroundImage.gameObject
+            .AddComponent<NineSlicePanelRenderer>();
+        renderer.Initialize(
+            backgroundSprite,
+            backgroundImage,
+            Color.white,
+            removeExistingChildren: true,
+            sliceBordersUv: new Vector4(
+                22f / 974f,
+                20f / 110f,
+                22f / 974f,
+                20f / 110f),
+            cornerUiSize: new Vector2(2.1f, 2f));
+        backgroundImage.enabled = false;
+    }
+
+    private static SelectionOptionButtonVisual[] InitializeOptionGroup(
+        RectTransform group,
+        int selectedIndex,
+        Action<int> selectionChanged,
+        Sprite unselectedSprite,
+        Sprite selectedSprite)
+    {
+        var buttons = group.GetComponentsInChildren<Button>(true)
+            .OrderBy(button => button.transform.GetSiblingIndex())
+            .ToArray();
+        var visuals = new SelectionOptionButtonVisual[buttons.Length];
+
+        for (var index = 0; index < buttons.Length; index++)
+        {
+            var button = buttons[index];
+            var label = button.GetComponentsInChildren<TMP_Text>(true)
+                .First(text => !string.IsNullOrWhiteSpace(text.text));
+            var visual = button.gameObject
+                .AddComponent<SelectionOptionButtonVisual>();
+            visual.Initialize(
+                button,
+                label,
+                unselectedSprite,
+                selectedSprite,
+                index == selectedIndex);
+
+            var buttonIndex = index;
+            button.onClick.AddListener(
+                () => selectionChanged(buttonIndex));
+            visuals[index] = visual;
+        }
+
+        return visuals;
+    }
+
+    private static void ApplySelection(
+        SelectionOptionButtonVisual[] visuals,
+        int selectedIndex)
+    {
+        for (var index = 0; index < visuals.Length; index++)
+        {
+            visuals[index].SetSelected(index == selectedIndex);
+        }
     }
 
     private IEnumerator RebuildMenuLayoutNextFrame()
     {
         yield return null;
+        LayoutMenu();
         ForceMenuLayoutRebuild();
+        LogLayoutGeometry();
+    }
+
+    private void LayoutMenu()
+    {
+        DisableLayoutComponents(_menuRoot);
+        DisableLayoutComponents(_headerRow);
+        _menuRoot.anchorMin = new Vector2(0.5f, 0.5f);
+        _menuRoot.anchorMax = new Vector2(0.5f, 0.5f);
+        _menuRoot.pivot = new Vector2(0.5f, 0.5f);
+        _menuRoot.anchoredPosition = new Vector2(0f, 6.5f);
+        _menuRoot.sizeDelta = new Vector2(112f, 54f);
+        _menuRoot.localScale = Vector3.one;
+
+        ConfigureFixedRect(
+            _headerRow,
+            new Vector2(112f, 10f),
+            new Vector2(0f, 22.25f));
+        ConfigureFixedRect(
+            _difficultyRow,
+            new Vector2(112f, 12.65f),
+            new Vector2(0f, 7.9f));
+        ConfigureFixedRect(
+            _balanceRow,
+            new Vector2(112f, 12.65f),
+            new Vector2(0f, -6.25f));
+        ConfigureFixedRect(
+            _durationRow,
+            new Vector2(112f, 12.65f),
+            new Vector2(0f, -20.4f));
+        ConfigureFixedRect(
+            (RectTransform)_exitButton.transform,
+            new Vector2(6.7f, 6.7f),
+            new Vector2(49f, 0f));
+
+        ConfigureRowContent(
+            _difficultyRow,
+            _difficultyIcon,
+            _difficultyLabel,
+            _difficultyOptions);
+        ConfigureRowContent(
+            _balanceRow,
+            _balanceIcon,
+            _balanceLabel,
+            _balanceOptions);
+        ConfigureRowContent(
+            _durationRow,
+            _durationIcon,
+            _durationLabel,
+            _durationOptions);
+    }
+
+    private static void ConfigureRowContent(
+        RectTransform row,
+        Image icon,
+        TMP_Text label,
+        RectTransform options)
+    {
+        DisableLayoutComponents(row);
+        DisableLayoutComponents(options);
+        ConfigureFixedRect(
+            icon.rectTransform,
+            new Vector2(6f, 6f),
+            new Vector2(-49.7f, 0f));
+        ConfigureFixedRect(
+            label.rectTransform,
+            new Vector2(23f, 8f),
+            new Vector2(-33f, 0f));
+        ConfigureFixedRect(
+            options,
+            new Vector2(73.4f, 6.9f),
+            new Vector2(16.5f, 0f));
+
+        var buttons = options.GetComponentsInChildren<Button>(true)
+            .OrderBy(button => button.transform.GetSiblingIndex())
+            .ToArray();
+        for (var index = 0; index < buttons.Length; index++)
+        {
+            ConfigureFixedRect(
+                (RectTransform)buttons[index].transform,
+                new Vector2(14.2f, 6.9f),
+                new Vector2(-29.6f + 14.8f * index, 0f));
+        }
+    }
+
+    private static void DisableLayoutComponents(RectTransform root)
+    {
+        foreach (var layoutGroup in root.GetComponents<LayoutGroup>())
+        {
+            layoutGroup.enabled = false;
+        }
+
+        foreach (var sizeFitter in root.GetComponents<ContentSizeFitter>())
+        {
+            sizeFitter.enabled = false;
+        }
+    }
+
+    private static void ConfigureFixedRect(
+        RectTransform rectTransform,
+        Vector2 size,
+        Vector2 position)
+    {
+        var layoutElement = rectTransform.GetComponent<LayoutElement>() ??
+                            rectTransform.gameObject
+                                .AddComponent<LayoutElement>();
+        layoutElement.ignoreLayout = true;
+        rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+        rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+        rectTransform.pivot = new Vector2(0.5f, 0.5f);
+        rectTransform.sizeDelta = size;
+        rectTransform.anchoredPosition = position;
+        rectTransform.localScale = Vector3.one;
+    }
+
+    private void LogLayoutGeometry()
+    {
+        Plugin.Log.Info(
+            "[BeatLeader UI] " +
+            DescribeRect("root", _menuRoot) + "; " +
+            DescribeRect("header", _headerRow) + "; " +
+            DescribeRect("difficulty", _difficultyRow) + "; " +
+            DescribeRect("balance", _balanceRow) + "; " +
+            DescribeRect("duration", _durationRow) + "; " +
+            DescribeRect("exit", (RectTransform)_exitButton.transform) + "; " +
+            DescribeRect("difficultyLabel", _difficultyLabel.rectTransform) +
+            "; " +
+            DescribeRect("difficultyOptions", _difficultyOptions));
+    }
+
+    private static string DescribeRect(
+        string name,
+        RectTransform rectTransform)
+    {
+        return $"{name}[anchor={rectTransform.anchoredPosition}, " +
+               $"size={rectTransform.rect.size}, " +
+               $"pivot={rectTransform.pivot}, " +
+               $"world={rectTransform.position}]";
     }
 
     private void ForceMenuLayoutRebuild()

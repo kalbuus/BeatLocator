@@ -17,6 +17,14 @@ internal static class RankingSelectViewSupport
     internal const int MapCount = 60;
     internal const string NineSliceResource = "BeatLocator.Assets.9slice_bg.png";
     internal const string ExitIconResource = "BeatLocator.Assets.x_mark.png";
+    internal const string CrossButtonResource =
+        "BeatLocator.Assets.cross_button.png";
+    internal const string SelectedButtonResource =
+        "BeatLocator.Assets.button_bg_selected.png";
+    internal const string UnselectedButtonResource =
+        "BeatLocator.Assets.button_bg_not_selected.png";
+    internal const string SelectionRowBackgroundResource =
+        "BeatLocator.Assets.bg_duration.png";
     private static readonly Dictionary<string, Sprite> SpriteCache =
         new Dictionary<string, Sprite>(StringComparer.Ordinal);
 
@@ -115,5 +123,55 @@ internal static class RankingSelectViewSupport
             100f);
         SpriteCache[resourceName] = sprite;
         return sprite;
+    }
+
+    internal static Sprite LoadSlicedSprite(
+        string resourceName,
+        Vector4 borderPixels,
+        float pixelsPerUnit,
+        float alphaMultiplier = 1f)
+    {
+        var cacheKey = resourceName + "|sliced|" + alphaMultiplier;
+        if (SpriteCache.TryGetValue(cacheKey, out var cachedSprite) &&
+            cachedSprite)
+        {
+            return cachedSprite;
+        }
+
+        var source = LoadSprite(resourceName);
+        var texture = source.texture;
+        if (!Mathf.Approximately(alphaMultiplier, 1f))
+        {
+            var pixels = texture.GetPixels32();
+            for (var index = 0; index < pixels.Length; index++)
+            {
+                pixels[index].a = (byte)Mathf.Clamp(
+                    Mathf.RoundToInt(pixels[index].a * alphaMultiplier),
+                    0,
+                    byte.MaxValue);
+            }
+
+            var adjustedTexture = new Texture2D(
+                texture.width,
+                texture.height,
+                TextureFormat.RGBA32,
+                false);
+            adjustedTexture.filterMode = texture.filterMode;
+            adjustedTexture.wrapMode = texture.wrapMode;
+            adjustedTexture.SetPixels32(pixels);
+            adjustedTexture.Apply();
+            texture = adjustedTexture;
+        }
+
+        var slicedSprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, texture.width, texture.height),
+            new Vector2(0.5f, 0.5f),
+            pixelsPerUnit,
+            0,
+            SpriteMeshType.FullRect,
+            borderPixels);
+        SpriteCache[cacheKey] = slicedSprite;
+        return slicedSprite;
     }
 }

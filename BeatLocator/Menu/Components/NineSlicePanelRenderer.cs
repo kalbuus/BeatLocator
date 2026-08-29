@@ -7,16 +7,18 @@ namespace BeatLocator.Menu;
 internal sealed class NineSlicePanelRenderer : MonoBehaviour
 {
     private const float SliceBorderUv = 0.12f;
-    private const float SliceCenterUv = 0.76f;
     private const float SliceCornerUiSize = 1.2f;
     private const float SliceCenterSafetyMargin = 0.04f;
     private static Sprite? _cachedSliceSource;
+    private static Vector4 _cachedSliceBorders;
     private static Sprite[] _cachedSliceSprites = Array.Empty<Sprite>();
 
     private RectTransform _root = null!;
     private RectTransform[] _sliceRects = Array.Empty<RectTransform>();
     private Image[] _sliceImages = Array.Empty<Image>();
     private Color _color;
+    private Vector2 _cornerUiSize =
+        new Vector2(SliceCornerUiSize, SliceCornerUiSize);
     private Vector2 _lastPanelSize;
     private Vector2 _lastLossyScale;
     private bool _layoutInitialized;
@@ -25,15 +27,29 @@ internal sealed class NineSlicePanelRenderer : MonoBehaviour
         Sprite source,
         Image rendererTemplate,
         Color color,
-        bool removeExistingChildren = false)
+        bool removeExistingChildren = false,
+        Vector4? sliceBordersUv = null,
+        Vector2? cornerUiSize = null)
     {
         _root = (RectTransform)transform;
+        _cornerUiSize = cornerUiSize ??
+                        new Vector2(
+                            SliceCornerUiSize,
+                            SliceCornerUiSize);
         if (removeExistingChildren)
         {
             RemoveExistingChildren();
         }
 
-        CreateSlices(source, rendererTemplate, color);
+        CreateSlices(
+            source,
+            rendererTemplate,
+            color,
+            sliceBordersUv ?? new Vector4(
+                SliceBorderUv,
+                SliceBorderUv,
+                SliceBorderUv,
+                SliceBorderUv));
         RefreshLayout();
     }
 
@@ -94,35 +110,46 @@ internal sealed class NineSlicePanelRenderer : MonoBehaviour
     private void CreateSlices(
         Sprite source,
         Image rendererTemplate,
-        Color color)
+        Color color,
+        Vector4 bordersUv)
     {
         _color = color;
-        var farEdge = 1f - SliceBorderUv;
+        var left = bordersUv.x;
+        var bottom = bordersUv.y;
+        var right = bordersUv.z;
+        var top = bordersUv.w;
+        var centerWidth = 1f - left - right;
+        var centerHeight = 1f - bottom - top;
+        var rightEdge = 1f - right;
+        var topEdge = 1f - top;
         var sliceUvs = new[]
         {
-            new Rect(0f, 0f, SliceBorderUv, SliceBorderUv),
-            new Rect(SliceBorderUv, 0f, SliceCenterUv, SliceBorderUv),
-            new Rect(farEdge, 0f, SliceBorderUv, SliceBorderUv),
-            new Rect(0f, SliceBorderUv, SliceBorderUv, SliceCenterUv),
+            new Rect(0f, 0f, left, bottom),
+            new Rect(left, 0f, centerWidth, bottom),
+            new Rect(rightEdge, 0f, right, bottom),
+            new Rect(0f, bottom, left, centerHeight),
             new Rect(
-                SliceBorderUv,
-                SliceBorderUv,
-                SliceCenterUv,
-                SliceCenterUv),
+                left,
+                bottom,
+                centerWidth,
+                centerHeight),
             new Rect(
-                farEdge,
-                SliceBorderUv,
-                SliceBorderUv,
-                SliceCenterUv),
-            new Rect(0f, farEdge, SliceBorderUv, SliceBorderUv),
+                rightEdge,
+                bottom,
+                right,
+                centerHeight),
+            new Rect(0f, topEdge, left, top),
             new Rect(
-                SliceBorderUv,
-                farEdge,
-                SliceCenterUv,
-                SliceBorderUv),
-            new Rect(farEdge, farEdge, SliceBorderUv, SliceBorderUv)
+                left,
+                topEdge,
+                centerWidth,
+                top),
+            new Rect(rightEdge, topEdge, right, top)
         };
-        var sliceSprites = GetSliceSprites(source, sliceUvs);
+        var sliceSprites = GetSliceSprites(
+            source,
+            sliceUvs,
+            bordersUv);
 
         _sliceRects = new RectTransform[sliceUvs.Length];
         _sliceImages = new Image[sliceUvs.Length];
@@ -153,9 +180,13 @@ internal sealed class NineSlicePanelRenderer : MonoBehaviour
         }
     }
 
-    private static Sprite[] GetSliceSprites(Sprite source, Rect[] sliceUvs)
+    private static Sprite[] GetSliceSprites(
+        Sprite source,
+        Rect[] sliceUvs,
+        Vector4 bordersUv)
     {
         if (_cachedSliceSource == source &&
+            _cachedSliceBorders == bordersUv &&
             _cachedSliceSprites.Length == sliceUvs.Length)
         {
             return _cachedSliceSprites;
@@ -168,6 +199,7 @@ internal sealed class NineSlicePanelRenderer : MonoBehaviour
         }
 
         _cachedSliceSource = source;
+        _cachedSliceBorders = bordersUv;
         _cachedSliceSprites = sprites;
         return sprites;
     }
@@ -210,8 +242,11 @@ internal sealed class NineSlicePanelRenderer : MonoBehaviour
         var minimumPanelWorldSide = Mathf.Min(
             Mathf.Abs(panelSize.x) * scaleX,
             Mathf.Abs(panelSize.y) * scaleY);
+        var requestedCornerWorldSize = Mathf.Min(
+            _cornerUiSize.x * scaleX,
+            _cornerUiSize.y * scaleY);
         var cornerWorldSize = Mathf.Min(
-            SliceCornerUiSize * minimumScale,
+            requestedCornerWorldSize,
             Mathf.Max(
                 0.0001f,
                 (minimumPanelWorldSide -

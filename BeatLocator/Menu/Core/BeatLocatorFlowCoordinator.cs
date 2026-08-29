@@ -35,6 +35,8 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     private const int FailedTerminalWatchdogMilliseconds = 3000;
     private const int MainFlowStabilityTimeoutMilliseconds = 5000;
     private const int MainFlowSwitchTimeoutMilliseconds = 10000;
+    private const float MenuLightsDimAlphaMultiplier = 0.45f;
+    private const float MenuLightsTransitionDurationSeconds = 0.35f;
 
     private static readonly MethodInfo? ReplaceChildFlowCoordinatorMethod =
         typeof(FlowCoordinator).GetMethod(
@@ -52,6 +54,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     private MainFlowCoordinator _mainFlowCoordinator = null!;
     private SoloFreePlayFlowCoordinator _soloFreePlayFlowCoordinator = null!;
+    private MenuLightsManager _menuLightsManager = null!;
     private IPlatformUserModel _platformUserModel = null!;
     private LazyInject<SelectViewController> _selectViewController = null!;
     private LazyInject<BeatLeaderSelect> _beatLeaderSelect = null!;
@@ -80,12 +83,14 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     private EvaluatedDifficulty? _postLevelRetrySelection;
     private bool _mainFlowSwitchInProgress;
     private int _mainFlowSwitchGeneration;
+    private bool _menuLightsDimmed;
     private static BeatLocatorFlowCoordinator? _activeInstance;
 
     [Inject]
     private void Construct(
         MainFlowCoordinator mainFlowCoordinator,
         SoloFreePlayFlowCoordinator soloFreePlayFlowCoordinator,
+        MenuLightsManager menuLightsManager,
         IPlatformUserModel platformUserModel,
         LazyInject<SelectViewController> selectViewController,
         LazyInject<BeatLeaderSelect> beatLeaderSelect,
@@ -101,6 +106,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         _activeInstance = this;
         _mainFlowCoordinator = mainFlowCoordinator;
         _soloFreePlayFlowCoordinator = soloFreePlayFlowCoordinator;
+        _menuLightsManager = menuLightsManager;
         _platformUserModel = platformUserModel;
         _selectViewController = selectViewController;
         _beatLeaderSelect = beatLeaderSelect;
@@ -1227,10 +1233,46 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         bool addedToHierarchy,
         bool screenSystemEnabling)
     {
+        DimMenuLights();
         if (firstActivation)
         {
             ProvideInitialViewControllers(_selectViewController.Value);
         }
+    }
+
+    protected override void DidDeactivate(
+        bool removedFromHierarchy,
+        bool screenSystemDisabling)
+    {
+        RestoreMenuLights();
+    }
+
+    private void DimMenuLights()
+    {
+        if (_menuLightsDimmed) return;
+
+        _menuLightsDimmed = true;
+        _menuLightsManager.SetAlphaMultiplier(
+            MenuLightsDimAlphaMultiplier,
+            animated: true,
+            duration: MenuLightsTransitionDurationSeconds);
+        Plugin.Log.Debug(
+            $"Menu lights dimmed to {MenuLightsDimAlphaMultiplier:0.00} " +
+            $"for BeatLocator over {MenuLightsTransitionDurationSeconds:0.00}s.");
+    }
+
+    private void RestoreMenuLights()
+    {
+        if (!_menuLightsDimmed) return;
+
+        _menuLightsDimmed = false;
+        _menuLightsManager.SetAlphaMultiplier(
+            1f,
+            animated: true,
+            duration: MenuLightsTransitionDurationSeconds);
+        Plugin.Log.Debug(
+            $"Menu lights restored over " +
+            $"{MenuLightsTransitionDurationSeconds:0.00}s.");
     }
 
     protected override void BackButtonWasPressed(ViewController topViewController)
