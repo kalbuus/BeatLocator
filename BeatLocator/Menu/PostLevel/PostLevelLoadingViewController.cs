@@ -1,6 +1,6 @@
 using BeatSaberMarkupLanguage.Attributes;
 using BeatSaberMarkupLanguage.ViewControllers;
-using System.Collections;
+using MotionUtils;
 using UnityEngine;
 
 namespace BeatLocator.Menu;
@@ -16,8 +16,8 @@ internal sealed class PostLevelLoadingViewController : BSMLAutomaticViewControll
     [UIValue("dotsText")]
     public string DotsText { get; private set; } = "•";
 
-    private Coroutine? _animationCoroutine;
     private int _animationId;
+    private MotionScope? _motion;
 
     internal void SetMessage(string message)
     {
@@ -35,11 +35,8 @@ internal sealed class PostLevelLoadingViewController : BSMLAutomaticViewControll
         if (!addedToHierarchy && !screenSystemEnabling) return;
 
         _animationId++;
-        if (_animationCoroutine != null)
-        {
-            StopCoroutine(_animationCoroutine);
-        }
-        _animationCoroutine = StartCoroutine(AnimateDots(_animationId));
+        _motion ??= MotionUtils.Motion.For(this);
+        StartDotsSequence(_animationId);
     }
 
     protected override void DidDeactivate(
@@ -47,11 +44,7 @@ internal sealed class PostLevelLoadingViewController : BSMLAutomaticViewControll
         bool screenSystemDisabling)
     {
         _animationId++;
-        if (_animationCoroutine != null)
-        {
-            StopCoroutine(_animationCoroutine);
-            _animationCoroutine = null;
-        }
+        _motion?.Kill("loading-dots");
         if (removedFromHierarchy || screenSystemDisabling)
         {
             _loadingRoot.gameObject.SetActive(false);
@@ -59,15 +52,25 @@ internal sealed class PostLevelLoadingViewController : BSMLAutomaticViewControll
         base.DidDeactivate(removedFromHierarchy, screenSystemDisabling);
     }
 
-    private IEnumerator AnimateDots(int animationId)
+    private void StartDotsSequence(int animationId)
     {
-        var count = 1;
-        while (animationId == _animationId)
+        if (_motion == null || animationId != _animationId)
         {
-            DotsText = new string('•', count);
-            NotifyPropertyChanged(nameof(DotsText));
-            count = count % 3 + 1;
-            yield return new WaitForSecondsRealtime(0.35f);
+            return;
         }
+
+        _motion.Sequence("loading-dots")
+            .At(0f, 0f, _ => SetDots(1), EaseType.Linear)
+            .At(0.35f, 0f, _ => SetDots(2), EaseType.Linear)
+            .At(0.7f, 0f, _ => SetDots(3), EaseType.Linear)
+            .AppendDelay(0.35f)
+            .OnCompleted(() => StartDotsSequence(animationId))
+            .Play();
+    }
+
+    private void SetDots(int count)
+    {
+        DotsText = new string('•', count);
+        NotifyPropertyChanged(nameof(DotsText));
     }
 }

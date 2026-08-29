@@ -2,8 +2,8 @@ using BeatLocator.PostLevel;
 using BeatLocator.EvaluationManagers;
 using BeatSaberMarkupLanguage.Attributes;
 using BeatSaberMarkupLanguage.ViewControllers;
-using System.Collections;
 using System.Globalization;
+using MotionUtils;
 using TMPro;
 using UnityEngine;
 using Zenject;
@@ -38,9 +38,9 @@ internal sealed class PpResultViewController : BSMLAutomaticViewController
 
     private BeatLocatorFlowCoordinator _flowCoordinator = null!;
     private PostLevelDisplayResult? _result;
-    private Coroutine? _animationCoroutine;
     private int _animationId;
     private CanvasGroup? _buttonCanvasGroup;
+    private MotionScope? _motion;
     private AudioSource? _ppTickAudioSource;
     private AudioClip? _ppTickAudioClip;
     private int _numericChangeCount;
@@ -63,6 +63,8 @@ internal sealed class PpResultViewController : BSMLAutomaticViewController
             : GetStatusDetail(result);
         NotifyPropertyChanged(nameof(PrimaryText));
         NotifyPropertyChanged(nameof(SecondaryText));
+        _motion?.Kill("result");
+        _motion?.Kill("buttons");
         SetButtonsVisible(false);
     }
 
@@ -80,25 +82,19 @@ internal sealed class PpResultViewController : BSMLAutomaticViewController
             : 7f;
         _buttonCanvasGroup ??= _buttonRow.GetComponent<CanvasGroup>() ??
                                _buttonRow.gameObject.AddComponent<CanvasGroup>();
+        _motion ??= MotionUtils.Motion.For(this);
         EnsurePpTickAudio();
         _numericChangeCount = 0;
         SetButtonsVisible(false);
-        if (_animationCoroutine != null)
-        {
-            StopCoroutine(_animationCoroutine);
-        }
-        _animationCoroutine = StartCoroutine(AnimateResult(_animationId, _result));
+        AnimateResult(_animationId, _result);
     }
 
     protected override void DidDeactivate(
         bool removedFromHierarchy,
         bool screenSystemDisabling)
     {
-        if (_animationCoroutine != null)
-        {
-            StopCoroutine(_animationCoroutine);
-            _animationCoroutine = null;
-        }
+        _motion?.Kill("result");
+        _motion?.Kill("buttons");
         _ppTickAudioSource?.Stop();
         if (removedFromHierarchy || screenSystemDisabling)
         {
@@ -107,59 +103,67 @@ internal sealed class PpResultViewController : BSMLAutomaticViewController
         base.DidDeactivate(removedFromHierarchy, screenSystemDisabling);
     }
 
-    private IEnumerator AnimateResult(int animationId, PostLevelDisplayResult result)
+    private void AnimateResult(int animationId, PostLevelDisplayResult result)
     {
+        if (_motion == null)
+        {
+            return;
+        }
+
         if (result.Outcome == PpResolutionOutcome.UploadedNewBest)
         {
             var targetScorePp = result.ScorePp ?? 0d;
             var targetProfileGain = result.ProfileGain ?? 0d;
-            var elapsed = 0f;
-            while (elapsed < CountUpDurationSeconds && animationId == _animationId)
-            {
-                elapsed += Time.unscaledDeltaTime;
-                var progress = Mathf.Clamp01(elapsed / CountUpDurationSeconds);
-                var eased = 1f - Mathf.Pow(1f - progress, 3f);
-                if (SetNumericText(targetScorePp * eased, targetProfileGain * eased))
+            _motion.Value(
+                "result",
+                0f,
+                1f,
+                progress =>
                 {
-                    PlayPpTick(progress);
-                }
-                yield return null;
-            }
-
-            if (animationId != _animationId) yield break;
-            if (SetNumericText(targetScorePp, targetProfileGain))
-            {
-                PlayPpTick(1f);
-            }
+                    if (animationId == _animationId &&
+                        SetNumericText(
+                            targetScorePp * progress,
+                            targetProfileGain * progress))
+                    {
+                        PlayPpTick(progress);
+                    }
+                },
+                new MotionSpec(CountUpDurationSeconds, EaseType.OutCubic),
+                () => FadeInButtons(animationId));
         }
         else
         {
-            yield return new WaitForSecondsRealtime(0.65f);
-            if (animationId != _animationId) yield break;
+            _motion.Delay(
+                "result",
+                0.65f,
+                () => FadeInButtons(animationId));
         }
-
-        yield return FadeInButtons(animationId);
-        _animationCoroutine = null;
     }
 
-    private IEnumerator FadeInButtons(int animationId)
+    private void FadeInButtons(int animationId)
     {
-        if (_buttonCanvasGroup == null) yield break;
+        if (_motion == null ||
+            _buttonCanvasGroup == null ||
+            animationId != _animationId)
+        {
+            return;
+        }
 
         _buttonCanvasGroup.alpha = 0f;
         _buttonCanvasGroup.interactable = false;
         _buttonCanvasGroup.blocksRaycasts = false;
-        var elapsed = 0f;
-        while (elapsed < ButtonFadeDurationSeconds && animationId == _animationId)
-        {
-            elapsed += Time.unscaledDeltaTime;
-            var progress = Mathf.Clamp01(elapsed / ButtonFadeDurationSeconds);
-            _buttonCanvasGroup.alpha = 1f - Mathf.Pow(1f - progress, 2f);
-            yield return null;
-        }
-
-        if (animationId != _animationId) yield break;
-        SetButtonsVisible(true);
+        _motion.Fade(
+            "buttons",
+            _buttonCanvasGroup,
+            1f,
+            new MotionSpec(ButtonFadeDurationSeconds, EaseType.OutQuad),
+            () =>
+            {
+                if (animationId == _animationId)
+                {
+                    SetButtonsVisible(true);
+                }
+            });
     }
 
     private bool SetNumericText(double scorePp, double profileGain)

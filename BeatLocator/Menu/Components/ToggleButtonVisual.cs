@@ -1,5 +1,6 @@
 using BeatSaberMarkupLanguage.Components;
 using HMUI;
+using MotionUtils;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -20,6 +21,7 @@ internal sealed class ToggleButtonVisual : MonoBehaviour
     private TMP_Text _label = null!;
     private float _currentState;
     private float _targetState;
+    private MotionScope _motion = null!;
 
     internal void Initialize(
         Button button,
@@ -29,6 +31,7 @@ internal sealed class ToggleButtonVisual : MonoBehaviour
         bool active)
     {
         _label = label;
+        _motion = MotionUtils.Motion.For(this);
         RemoveNativeVisuals(button, label);
 
         var backgroundObject = new GameObject(
@@ -60,20 +63,21 @@ internal sealed class ToggleButtonVisual : MonoBehaviour
     internal void SetActive(bool active)
     {
         _targetState = active ? 1f : 0f;
-    }
-
-    private void Update()
-    {
         if (Mathf.Approximately(_currentState, _targetState))
         {
             return;
         }
 
-        _currentState = Mathf.MoveTowards(
+        _motion.Value(
+            "active",
             _currentState,
             _targetState,
-            Time.unscaledDeltaTime / TransitionDurationSeconds);
-        ApplyColors();
+            value =>
+            {
+                _currentState = value;
+                ApplyColors();
+            },
+            new MotionSpec(TransitionDurationSeconds));
     }
 
     private void ApplyColors()

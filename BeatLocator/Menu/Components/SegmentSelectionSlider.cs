@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using MotionUtils;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -10,7 +11,7 @@ internal sealed class SegmentSelectionSlider : MonoBehaviour
 {
     private const float HorizontalPadding = 3.5f;
     private const float VerticalPadding = 1.2f;
-    private const float AnimationSmoothTime = 0.16f;
+    private const float AnimationDuration = 0.2f;
     private static readonly Color PanelTint =
         new Color(1f, 1f, 1f, 1f);
     private static readonly Color NormalTextTint =
@@ -22,10 +23,11 @@ internal sealed class SegmentSelectionSlider : MonoBehaviour
     private TMP_Text[] _labels = Array.Empty<TMP_Text>();
     private int _optionCount;
     private int _selectedIndex;
-    private Vector2 _positionVelocity;
-    private Vector2 _sizeVelocity;
+    private Vector2 _lastTargetPosition;
+    private Vector2 _lastTargetSize;
     private bool _labelsSorted;
     private bool _positionInitialized;
+    private MotionScope _motion = null!;
 
     internal void Initialize(
         RectTransform track,
@@ -37,8 +39,9 @@ internal sealed class SegmentSelectionSlider : MonoBehaviour
         _slider = sliderImage.rectTransform;
         _optionCount = Mathf.Max(1, optionCount);
         _selectedIndex = Mathf.Clamp(selectedIndex, 0, _optionCount - 1);
-        _positionVelocity = Vector2.zero;
-        _sizeVelocity = Vector2.zero;
+        _motion = MotionUtils.Motion.For(this);
+        _lastTargetPosition = Vector2.zero;
+        _lastTargetSize = Vector2.zero;
         _labelsSorted = false;
         _positionInitialized = false;
         _labels = Array.Empty<TMP_Text>();
@@ -78,6 +81,8 @@ internal sealed class SegmentSelectionSlider : MonoBehaviour
         {
             // BSML can briefly remove all segment labels while rebuilding the
             // control. Do not leave the panel at its prefab/default size.
+            _motion.Kill("slider-position");
+            _motion.Kill("slider-size");
             _slider.sizeDelta = Vector2.zero;
             return;
         }
@@ -112,30 +117,49 @@ internal sealed class SegmentSelectionSlider : MonoBehaviour
                 segmentWidth),
             renderedTextSize.y + VerticalPadding);
 
-        if (_positionInitialized)
-        {
-            _slider.anchoredPosition = Vector2.SmoothDamp(
-                _slider.anchoredPosition,
-                targetPosition,
-                ref _positionVelocity,
-                AnimationSmoothTime,
-                Mathf.Infinity,
-                Time.unscaledDeltaTime);
-            _slider.sizeDelta = Vector2.SmoothDamp(
-                _slider.sizeDelta,
-                targetSize,
-                ref _sizeVelocity,
-                AnimationSmoothTime,
-                Mathf.Infinity,
-                Time.unscaledDeltaTime);
-        }
-        else
+        if (!_positionInitialized)
         {
             _slider.anchoredPosition = targetPosition;
             _slider.sizeDelta = targetSize;
+            _lastTargetPosition = targetPosition;
+            _lastTargetSize = targetSize;
+            _positionInitialized = true;
+            return;
         }
 
-        _positionInitialized = true;
+        if (!Approximately(_lastTargetPosition, targetPosition))
+        {
+            _lastTargetPosition = targetPosition;
+            _motion.Vector2Value(
+                "slider-position",
+                _slider.anchoredPosition,
+                targetPosition,
+                value =>
+                {
+                    if (_slider)
+                    {
+                        _slider.anchoredPosition = value;
+                    }
+                },
+                new MotionSpec(AnimationDuration, EaseType.OutCubic));
+        }
+
+        if (!Approximately(_lastTargetSize, targetSize))
+        {
+            _lastTargetSize = targetSize;
+            _motion.Vector2Value(
+                "slider-size",
+                _slider.sizeDelta,
+                targetSize,
+                value =>
+                {
+                    if (_slider)
+                    {
+                        _slider.sizeDelta = value;
+                    }
+                },
+                new MotionSpec(AnimationDuration, EaseType.OutCubic));
+        }
     }
 
     private bool TryPrepareLabels()
@@ -158,8 +182,6 @@ internal sealed class SegmentSelectionSlider : MonoBehaviour
         _labels = liveLabels.ToArray();
         _labelsSorted = _labels.Length >= _optionCount;
         _positionInitialized = false;
-        _positionVelocity = Vector2.zero;
-        _sizeVelocity = Vector2.zero;
 
         return _labelsSorted && _selectedIndex < _labels.Length;
     }
@@ -207,11 +229,17 @@ internal sealed class SegmentSelectionSlider : MonoBehaviour
 
     private void InvalidateLabels()
     {
+        _motion?.Kill("slider-position");
+        _motion?.Kill("slider-size");
         _labels = Array.Empty<TMP_Text>();
         _labelsSorted = false;
         _positionInitialized = false;
-        _positionVelocity = Vector2.zero;
-        _sizeVelocity = Vector2.zero;
+    }
+
+    private static bool Approximately(Vector2 left, Vector2 right)
+    {
+        const float tolerance = 0.001f;
+        return (left - right).sqrMagnitude <= tolerance * tolerance;
     }
 
     private void ApplyTextTints()

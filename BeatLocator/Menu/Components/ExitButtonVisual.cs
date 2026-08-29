@@ -1,5 +1,6 @@
 using BeatSaberMarkupLanguage.Components;
 using HMUI;
+using MotionUtils;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -18,7 +19,7 @@ internal sealed class ExitButtonVisual : MonoBehaviour,
 
     private NineSlicePanelRenderer _background = null!;
     private float _currentHover;
-    private bool _pointerInside;
+    private MotionScope _motion = null!;
 
     internal void Initialize(
         Button button,
@@ -27,6 +28,7 @@ internal sealed class ExitButtonVisual : MonoBehaviour,
         Sprite iconSprite)
     {
         RemoveNativeVisuals(button, icon);
+        _motion = MotionUtils.Motion.For(this);
 
         icon.sprite = iconSprite;
         icon.preserveAspect = true;
@@ -55,33 +57,36 @@ internal sealed class ExitButtonVisual : MonoBehaviour,
         icon.rectTransform.SetAsLastSibling();
         button.targetGraphic = CreateHitTarget(button);
         _currentHover = 0f;
-        _pointerInside = false;
         ApplyColor();
     }
 
     public void OnPointerEnter(PointerEventData eventData)
     {
-        _pointerInside = true;
+        AnimateHover(1f);
     }
 
     public void OnPointerExit(PointerEventData eventData)
     {
-        _pointerInside = false;
+        AnimateHover(0f);
     }
 
-    private void Update()
+    private void AnimateHover(float targetHover)
     {
-        var targetHover = _pointerInside ? 1f : 0f;
         if (Mathf.Approximately(_currentHover, targetHover))
         {
             return;
         }
 
-        _currentHover = Mathf.MoveTowards(
+        _motion.Value(
+            "hover",
             _currentHover,
             targetHover,
-            Time.unscaledDeltaTime / TransitionDurationSeconds);
-        ApplyColor();
+            value =>
+            {
+                _currentHover = value;
+                ApplyColor();
+            },
+            new MotionSpec(TransitionDurationSeconds));
     }
 
     private void ApplyColor()
@@ -94,7 +99,7 @@ internal sealed class ExitButtonVisual : MonoBehaviour,
 
     private void OnDisable()
     {
-        _pointerInside = false;
+        _motion?.Kill("hover");
         _currentHover = 0f;
         if (_background)
         {

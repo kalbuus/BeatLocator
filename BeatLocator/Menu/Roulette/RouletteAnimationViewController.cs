@@ -9,6 +9,7 @@ using BeatSaberMarkupLanguage;
 using BeatSaberMarkupLanguage.Attributes;
 using BeatSaberMarkupLanguage.ViewControllers;
 using HMUI;
+using MotionUtils;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -118,7 +119,6 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     private Material? _roundEdgeMaterial;
     private Task<Sprite>? _coverLoadTask;
     private Coroutine? _spinCoroutine;
-    private Coroutine? _revealCoroutine;
     private bool _spinFinished;
     private bool _secretDifficulty;
     private int _runId;
@@ -127,6 +127,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     private string? _fallbackCoverUrl;
     private string? _previewUrl;
     private PrimaryButtonState _primaryButtonState;
+    private MotionScope? _motion;
 
     private enum PrimaryButtonState
     {
@@ -188,6 +189,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     [UIAction("#post-parse")]
     private void PostParse()
     {
+        _motion ??= MotionUtils.Motion.For(this);
         _rouletteRoot.localScale = Vector3.one * InterfaceScale;
         _rouletteRoot.anchoredPosition += new Vector2(0f, InterfaceVerticalOffset);
 
@@ -760,7 +762,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         {
             _ = LoadCoverAsync(runId);
         }
-        _spinCoroutine = StartCoroutine(AnimateRoulette(runId));
+        _spinCoroutine = StartCoroutine(StartRouletteAfterLayout(runId));
     }
 
     private async Task LoadCoverAsync(int runId)
@@ -888,10 +890,13 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         return sprite;
     }
 
-    private IEnumerator AnimateRoulette(int runId)
+    private IEnumerator StartRouletteAfterLayout(int runId)
     {
         // Let BSML finish its first layout pass before reading the viewport width.
         yield return null;
+        _spinCoroutine = null;
+        if (runId != _runId || _motion == null) yield break;
+
         LayoutRebuilder.ForceRebuildLayoutImmediate(_viewport);
 
         if (_viewport.rect.width < 1f || _viewport.rect.height < 1f)
@@ -902,45 +907,62 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
             _viewport.sizeDelta = new Vector2(ViewportWidth, ViewportHeight);
         }
 
-        var startX = 0f;
+        StartRouletteTween(runId);
+    }
+
+    private void StartRouletteTween(int runId)
+    {
+        if (_motion == null)
+        {
+            return;
+        }
+
+        const float startX = 0f;
         var targetX = GetTargetPosition(WinnerIndex);
-        var elapsed = 0f;
         var step = CardSize + CardSpacing;
         var viewportCenter = _viewport.rect.width * 0.5f;
         var nextPassedCard = Mathf.Max(
             0,
             Mathf.FloorToInt((viewportCenter - CardSize * 0.5f) / step) + 1);
-
-        while (elapsed < SpinDuration * (1/_config.SpeedAnimationValue) && runId == _runId)
-        {
-            elapsed += Time.unscaledDeltaTime;
-            var progress = Mathf.Clamp01(elapsed / (SpinDuration * (1/_config.SpeedAnimationValue)));
-            var easedProgress = 1f - Mathf.Pow(1f - progress, 5f);
-
-            var position = _strip.anchoredPosition;
-            position.x = Mathf.LerpUnclamped(startX, targetX, easedProgress);
-            _strip.anchoredPosition = position;
-            UpdateCoverScales();
-
-            var stripCenterPosition = viewportCenter - position.x;
-            while (nextPassedCard < WinnerIndex &&
-                   CardSize * 0.5f + nextPassedCard * step <= stripCenterPosition)
+        var duration = SpinDuration * (1f / _config.SpeedAnimationValue);
+        _motion.Value(
+            "roulette-spin",
+            0f,
+            1f,
+            progress =>
             {
-                PlayRouletteHit();
-                nextPassedCard++;
-            }
+                if (runId != _runId) return;
 
-            yield return null;
+                var position = _strip.anchoredPosition;
+                position.x = Mathf.LerpUnclamped(startX, targetX, progress);
+                _strip.anchoredPosition = position;
+                UpdateCoverScales();
+
+                var stripCenterPosition = viewportCenter - position.x;
+                while (nextPassedCard < WinnerIndex &&
+                       CardSize * 0.5f + nextPassedCard * step <=
+                       stripCenterPosition)
+                {
+                    PlayRouletteHit();
+                    nextPassedCard++;
+                }
+            },
+            new MotionSpec(duration, EaseType.OutQuint),
+            () => CompleteRouletteSpin(runId, targetX));
+    }
+
+    private void CompleteRouletteSpin(int runId, float targetX)
+    {
+        if (runId != _runId)
+        {
+            return;
         }
-
-        if (runId != _runId) yield break;
 
         var finalPosition = _strip.anchoredPosition;
         finalPosition.x = targetX;
         _strip.anchoredPosition = finalPosition;
         UpdateCoverScales();
         PlayRouletteStop();
-        _spinCoroutine = null;
         _spinFinished = true;
 
         // Cover loading is optional presentation work. Never hold the roulette
@@ -1127,7 +1149,36 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     private void RevealWinner()
     {
         SetStatus(SongTitleText);
-        _revealCoroutine = StartCoroutine(FadeInWinner(_runId));
+        if (_motion == null)
+        {
+            return;
+        }
+
+        var runId = _runId;
+        const float revealDuration = 0.35f;
+        _motion.Sequence("winner-reveal")
+            .Append(
+                revealDuration,
+                progress =>
+                {
+                    if (runId == _runId)
+                    {
+                        _winnerCanvasGroup.alpha = Mathf.Clamp01(progress);
+                    }
+                },
+                EaseType.Linear,
+                () => _winnerCanvasGroup.alpha = 0f,
+                () => CommitWinnerCover(runId),
+                () => _winnerCanvasGroup.alpha = 0f)
+            .AppendDelay(0.45f)
+            .OnCompleted(() =>
+            {
+                if (runId == _runId)
+                {
+                    StartSongInfoTransition(runId);
+                }
+            })
+            .Play();
     }
 
     private void ApplyLoadedCover(Sprite coverSprite)
@@ -1138,42 +1189,28 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         _heroCover.sprite = coverSprite;
     }
 
-    private IEnumerator FadeInWinner(int runId)
+    private void CommitWinnerCover(int runId)
     {
-        const float revealDuration = 0.35f;
-        var elapsed = 0f;
-
-        while (elapsed < revealDuration && runId == _runId)
+        if (runId != _runId)
         {
-            elapsed += Time.unscaledDeltaTime;
-            _winnerCanvasGroup.alpha = Mathf.Clamp01(elapsed / revealDuration);
-            yield return null;
+            return;
         }
 
-        if (runId == _runId)
-        {
-            _winnerCanvasGroup.alpha = 1f;
-
-            // Commit the loaded sprite directly to the card after the cross-fade.
-            // This avoids relying on a nested Image for the final frame.
-            var winnerCard = _dummyCovers[WinnerIndex];
-            winnerCard.sprite = _winnerCover.sprite;
-            winnerCard.color = Color.white;
-            _winnerCanvasGroup.alpha = 0f;
-        }
-
-        yield return new WaitForSecondsRealtime(0.45f);
-
-        if (runId == _runId)
-        {
-            yield return TransitionToSongInfo(runId);
-        }
-
-        _revealCoroutine = null;
+        // Commit the loaded sprite directly to the card after the cross-fade.
+        // This avoids relying on a nested Image for the final frame.
+        var winnerCard = _dummyCovers[WinnerIndex];
+        winnerCard.sprite = _winnerCover.sprite;
+        winnerCard.color = Color.white;
+        _winnerCanvasGroup.alpha = 0f;
     }
 
-    private IEnumerator TransitionToSongInfo(int runId)
+    private void StartSongInfoTransition(int runId)
     {
+        if (_motion == null || runId != _runId)
+        {
+            return;
+        }
+
         var initialHeroSize = CardSize * (1f + MaximumCenterScaleBonus);
         _heroCover.sprite = _loadedCoverSprite ?? _roundedCardSprite;
         _heroCoverTransform.sizeDelta = new Vector2(initialHeroSize, initialHeroSize);
@@ -1181,52 +1218,74 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         _heroCoverCanvasGroup.alpha = 1f;
         _heroCoverTransform.gameObject.SetActive(true);
 
-        const float rouletteFadeDuration = 0.45f;
-        var elapsed = 0f;
-
-        while (elapsed < rouletteFadeDuration && runId == _runId)
-        {
-            elapsed += Time.unscaledDeltaTime;
-            var alpha = 1f - Mathf.Clamp01(elapsed / rouletteFadeDuration);
-            _stripCanvasGroup.alpha = alpha;
-            _centerMarkerCanvasGroup.alpha = alpha;
-            var backgroundColor = _viewportBackgroundColor;
-            backgroundColor.a *= alpha;
-            _viewportBackground.color = backgroundColor;
-            yield return null;
-        }
-
-        if (runId != _runId) yield break;
-
-        _strip.gameObject.SetActive(false);
-        _centerMarker.gameObject.SetActive(false);
-        _viewportBackground.enabled = false;
-
         const float heroMoveDuration = 0.65f;
         var heroStartPosition = Vector2.zero;
         var heroTargetPosition = new Vector2(-ViewportWidth * 0.285f, 0f);
         var heroStartSize = new Vector2(initialHeroSize, initialHeroSize);
         var heroTargetSizeValue = CardSize * 1.48f;
         var heroTargetSize = new Vector2(heroTargetSizeValue, heroTargetSizeValue);
-        elapsed = 0f;
+        const float rouletteFadeDuration = 0.45f;
+        _motion.Sequence("song-info-transition")
+            .Append(
+                rouletteFadeDuration,
+                progress => ApplyRouletteFade(runId, progress),
+                EaseType.Linear,
+                null,
+                () => CompleteRouletteFade(runId))
+            .Append(
+                heroMoveDuration,
+                progress =>
+                {
+                    if (runId != _runId) return;
 
-        while (elapsed < heroMoveDuration && runId == _runId)
-        {
-            elapsed += Time.unscaledDeltaTime;
-            var progress = Mathf.Clamp01(elapsed / heroMoveDuration);
-            var eased = progress * progress * (3f - 2f * progress);
-            _heroCoverTransform.anchoredPosition = Vector2.LerpUnclamped(
-                heroStartPosition,
+                    var eased = progress * progress * (3f - 2f * progress);
+                    _heroCoverTransform.anchoredPosition =
+                        Vector2.LerpUnclamped(
+                            heroStartPosition,
+                            heroTargetPosition,
+                            eased);
+                    _heroCoverTransform.sizeDelta = Vector2.LerpUnclamped(
+                        heroStartSize,
+                        heroTargetSize,
+                        eased);
+                },
+                EaseType.Linear)
+            .OnCompleted(() => CompleteHeroMove(
+                runId,
                 heroTargetPosition,
-                eased);
-            _heroCoverTransform.sizeDelta = Vector2.LerpUnclamped(
-                heroStartSize,
-                heroTargetSize,
-                eased);
-            yield return null;
-        }
+                heroTargetSize))
+            .Play();
+    }
 
-        if (runId != _runId) yield break;
+    private void ApplyRouletteFade(int runId, float progress)
+    {
+        if (runId != _runId) return;
+
+        var alpha = 1f - Mathf.Clamp01(progress);
+        _stripCanvasGroup.alpha = alpha;
+        _centerMarkerCanvasGroup.alpha = alpha;
+        var backgroundColor = _viewportBackgroundColor;
+        backgroundColor.a *= alpha;
+        _viewportBackground.color = backgroundColor;
+    }
+
+    private void CompleteRouletteFade(int runId)
+    {
+        if (runId != _runId) return;
+
+        _stripCanvasGroup.alpha = 0f;
+        _centerMarkerCanvasGroup.alpha = 0f;
+        _strip.gameObject.SetActive(false);
+        _centerMarker.gameObject.SetActive(false);
+        _viewportBackground.enabled = false;
+    }
+
+    private void CompleteHeroMove(
+        int runId,
+        Vector2 heroTargetPosition,
+        Vector2 heroTargetSize)
+    {
+        if (runId != _runId || _motion == null) return;
 
         _heroCoverTransform.anchoredPosition = heroTargetPosition;
         _heroCoverTransform.sizeDelta = heroTargetSize;
@@ -1244,35 +1303,19 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         LayoutSongTitleRow();
         EnforceSongDetailsBounds();
 
-        foreach (var detailCanvasGroup in _songDetailCanvasGroups)
-        {
-            if (runId != _runId) yield break;
-            if (!detailCanvasGroup.gameObject.activeInHierarchy) continue;
-
-            var detailTransform = (RectTransform)detailCanvasGroup.transform;
-            var targetPosition = detailTransform.anchoredPosition;
-            var startPosition = targetPosition + new Vector2(0f, 2f);
-            detailTransform.anchoredPosition = startPosition;
-            detailCanvasGroup.alpha = 0f;
-            elapsed = 0f;
-
-            const float detailFadeDuration = 0.2f;
-            while (elapsed < detailFadeDuration && runId == _runId)
-            {
-                elapsed += Time.unscaledDeltaTime;
-                var progress = Mathf.Clamp01(elapsed / detailFadeDuration);
-                detailCanvasGroup.alpha = progress;
-                detailTransform.anchoredPosition = Vector2.LerpUnclamped(
-                    startPosition,
-                    targetPosition,
-                    progress);
-                yield return null;
-            }
-
-            detailCanvasGroup.alpha = 1f;
-            detailTransform.anchoredPosition = targetPosition;
-            yield return new WaitForSecondsRealtime(0.05f);
-        }
+        const float detailFadeDuration = 1f;
+        const float detailStaggerInterval = 0.25f;
+        var liveDetailGroups = _songDetailCanvasGroups
+            .Where(group => group && group.gameObject.activeInHierarchy)
+            .ToArray();
+        _motion.Sequence("song-details")
+            .StaggerReveal(
+                liveDetailGroups,
+                detailStaggerInterval,
+                detailFadeDuration,
+                new Vector2(0f, 2f),
+                EaseType.OutCubic)
+            .Play();
     }
 
     private async void TogglePreviewPlayback()
@@ -1564,6 +1607,10 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
 
     private void StopAnimations()
     {
+        _motion?.Kill("roulette-spin");
+        _motion?.Kill("winner-reveal");
+        _motion?.Kill("song-info-transition");
+        _motion?.Kill("song-details");
         if (_rouletteAudioSource != null)
         {
             _rouletteAudioSource.Stop();
@@ -1575,11 +1622,6 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
             _spinCoroutine = null;
         }
 
-        if (_revealCoroutine != null)
-        {
-            StopCoroutine(_revealCoroutine);
-            _revealCoroutine = null;
-        }
     }
 
     private void SetStatus(string status)

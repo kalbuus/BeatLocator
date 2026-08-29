@@ -1,3 +1,4 @@
+using MotionUtils;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -16,24 +17,30 @@ internal sealed class PlatformButtonBackgroundTransition : MonoBehaviour,
     private Button _button = null!;
     private Image _background = null!;
     private float _currentBrightness;
+    private float _targetBrightness;
     private bool _pointerInside;
+    private MotionScope _motion = null!;
 
     internal void Initialize(Button button, Image background)
     {
         _button = button;
         _background = background;
+        _motion = MotionUtils.Motion.For(this);
         _currentBrightness = GetTargetBrightness();
+        _targetBrightness = _currentBrightness;
         ApplyBrightness();
     }
 
     public void OnPointerEnter(PointerEventData eventData)
     {
         _pointerInside = true;
+        AnimateToTarget();
     }
 
     public void OnPointerExit(PointerEventData eventData)
     {
         _pointerInside = false;
+        AnimateToTarget();
     }
 
     private void Update()
@@ -44,16 +51,35 @@ internal sealed class PlatformButtonBackgroundTransition : MonoBehaviour,
         }
 
         var targetBrightness = GetTargetBrightness();
-        if (Mathf.Approximately(_currentBrightness, targetBrightness))
+        if (Mathf.Approximately(_targetBrightness, targetBrightness))
         {
             return;
         }
 
-        _currentBrightness = Mathf.MoveTowards(
+        AnimateTo(targetBrightness);
+    }
+
+    private void AnimateToTarget()
+    {
+        if (_button != null && _background != null)
+        {
+            AnimateTo(GetTargetBrightness());
+        }
+    }
+
+    private void AnimateTo(float targetBrightness)
+    {
+        _targetBrightness = targetBrightness;
+        _motion.Value(
+            "brightness",
             _currentBrightness,
             targetBrightness,
-            Time.unscaledDeltaTime / FadeDurationSeconds);
-        ApplyBrightness();
+            value =>
+            {
+                _currentBrightness = value;
+                ApplyBrightness();
+            },
+            new MotionSpec(FadeDurationSeconds));
     }
 
     private float GetTargetBrightness()
@@ -80,5 +106,7 @@ internal sealed class PlatformButtonBackgroundTransition : MonoBehaviour,
     private void OnDisable()
     {
         _pointerInside = false;
+        _motion?.Kill("brightness");
+        _targetBrightness = _currentBrightness;
     }
 }

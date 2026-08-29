@@ -1,5 +1,6 @@
 using BeatSaberMarkupLanguage.Components;
 using HMUI;
+using MotionUtils;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -22,6 +23,7 @@ internal sealed class SelectionOptionButtonVisual : MonoBehaviour
     private TMP_Text _label = null!;
     private float _currentSelection;
     private float _targetSelection;
+    private MotionScope _motion = null!;
 
     internal void Initialize(
         Button button,
@@ -31,6 +33,7 @@ internal sealed class SelectionOptionButtonVisual : MonoBehaviour
         bool selected)
     {
         _label = label;
+        _motion = MotionUtils.Motion.For(this);
         var rendererTemplate = button.targetGraphic as Image ??
                                button.GetComponentInChildren<Image>(true);
         RemoveNativeVisuals(button, label);
@@ -62,22 +65,21 @@ internal sealed class SelectionOptionButtonVisual : MonoBehaviour
     internal void SetSelected(bool selected)
     {
         _targetSelection = selected ? 1f : 0f;
-    }
-
-    private void Update()
-    {
-        if (Mathf.Approximately(
-                _currentSelection,
-                _targetSelection))
+        if (Mathf.Approximately(_currentSelection, _targetSelection))
         {
             return;
         }
 
-        _currentSelection = Mathf.MoveTowards(
+        _motion.Value(
+            "selection",
             _currentSelection,
             _targetSelection,
-            Time.unscaledDeltaTime / FadeDurationSeconds);
-        ApplyFade();
+            value =>
+            {
+                _currentSelection = value;
+                ApplyFade();
+            },
+            new MotionSpec(FadeDurationSeconds));
     }
 
     private void ApplyFade()
