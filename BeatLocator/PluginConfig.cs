@@ -30,6 +30,8 @@ internal class PluginConfig
 
     public virtual bool BeatLeaderSecretDifficultyEnabled { get; set; } = false;
 
+    public virtual bool BeatLeaderBotSpeechEnabled { get; set; } = true;
+
     public virtual int DurationSelection { get; set; } = 0;
 
     public virtual int ScoreSaberPlayedSelection { get; set; } = 0;

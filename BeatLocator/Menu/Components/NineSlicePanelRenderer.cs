@@ -219,11 +219,44 @@ internal sealed class NineSlicePanelRenderer : MonoBehaviour
         Rect normalizedRect)
     {
         var sourceRect = source.textureRect;
-        var sliceRect = new Rect(
-            sourceRect.x + sourceRect.width * normalizedRect.x,
-            sourceRect.y + sourceRect.height * normalizedRect.y,
-            sourceRect.width * normalizedRect.width,
-            sourceRect.height * normalizedRect.height);
+        var sourceXMin = Mathf.Clamp(
+            Mathf.CeilToInt(sourceRect.xMin),
+            0,
+            source.texture.width - 1);
+        var sourceYMin = Mathf.Clamp(
+            Mathf.CeilToInt(sourceRect.yMin),
+            0,
+            source.texture.height - 1);
+        var sourceXMax = Mathf.Clamp(
+            Mathf.FloorToInt(sourceRect.xMax),
+            sourceXMin + 1,
+            source.texture.width);
+        var sourceYMax = Mathf.Clamp(
+            Mathf.FloorToInt(sourceRect.yMax),
+            sourceYMin + 1,
+            source.texture.height);
+
+        var xMin = Mathf.Clamp(
+            Mathf.RoundToInt(
+                sourceRect.x + sourceRect.width * normalizedRect.xMin),
+            sourceXMin,
+            sourceXMax - 1);
+        var yMin = Mathf.Clamp(
+            Mathf.RoundToInt(
+                sourceRect.y + sourceRect.height * normalizedRect.yMin),
+            sourceYMin,
+            sourceYMax - 1);
+        var xMax = Mathf.Clamp(
+            Mathf.RoundToInt(
+                sourceRect.x + sourceRect.width * normalizedRect.xMax),
+            xMin + 1,
+            sourceXMax);
+        var yMax = Mathf.Clamp(
+            Mathf.RoundToInt(
+                sourceRect.y + sourceRect.height * normalizedRect.yMax),
+            yMin + 1,
+            sourceYMax);
+        var sliceRect = Rect.MinMaxRect(xMin, yMin, xMax, yMax);
 
         return Sprite.Create(
             source.texture,

@@ -128,6 +128,18 @@ internal sealed class RankingSearchPreferences
         }
     }
 
+    internal bool BotSpeechEnabled
+    {
+        get => _config.BeatLeaderBotSpeechEnabled;
+        set
+        {
+            if (_config.BeatLeaderBotSpeechEnabled != value)
+            {
+                _config.BeatLeaderBotSpeechEnabled = value;
+            }
+        }
+    }
+
     internal SongDurationFilter DurationSelection
     {
         get

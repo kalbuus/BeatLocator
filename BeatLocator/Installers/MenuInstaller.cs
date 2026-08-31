@@ -1,6 +1,7 @@
 using Zenject;
 using BeatLocator.Menu;
 using BeatLocator.Settings;
+using BeatLocator.Dialogue;
 
 namespace BeatLocator.Installers;
 
@@ -19,6 +20,7 @@ internal class MenuInstaller : Installer
         Container.BindInterfacesTo<SettingsMenuManager>().AsSingle();
         Container.BindInterfacesTo<MenuManager>().AsSingle();
         Container.Bind<RankingSearchPreferences>().AsSingle();
+        Container.Bind<BotDialogueService>().AsSingle();
 
         // This will create a single instance of SettingsMenu, and lets it be injected into other types
         Container.Bind<SettingsMenu>().AsSingle();

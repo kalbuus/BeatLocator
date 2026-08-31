@@ -1,4 +1,5 @@
 using BeatLocator.EvaluationManagers;
+using BeatLocator.Dialogue;
 using BeatLocator.Integrations;
 using BeatLocator.PostLevel;
 using BeatLocator.Settings;
@@ -696,6 +697,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         _mapSearchCancellationSource = cancellationSource;
         var showRoulette = false;
         PopupRequest? failurePopup = null;
+        string? botDialogueEvent = null;
 
         try
         {
@@ -709,6 +711,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
             if (!searchResult.IsSuccess || searchResult.SelectedDifficulty == null)
             {
+                botDialogueEvent = BotDialogueEvents.SearchProblem;
                 failurePopup = new PopupRequest(
                     "SONG NOT FOUND",
                     searchResult.FailureReason ?? "No suitable song was found.");
@@ -725,6 +728,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         }
         catch (OperationCanceledException)
         {
+            botDialogueEvent = BotDialogueEvents.SearchProblem;
             var serviceName = provider.GetDisplayName();
             Plugin.Log.Error($"{serviceName} map search timed out after 45 seconds.");
             failurePopup = new PopupRequest(
@@ -733,6 +737,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         }
         catch (Exception exception)
         {
+            botDialogueEvent = BotDialogueEvents.SearchProblem;
             Plugin.Log.Error($"Unexpected error while finding maps: {exception}");
             failurePopup = new PopupRequest(
                 "SONG SEARCH FAILED",
@@ -753,6 +758,11 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 else
                 {
                     _beatLeaderSelect.Value.SetSearchInProgress(false);
+                    if (!startedFromPostLevel && botDialogueEvent != null)
+                    {
+                        _beatLeaderSelect.Value.ShowSearchFailureDialogue(
+                            botDialogueEvent);
+                    }
                 }
             }
 

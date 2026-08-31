@@ -1,0 +1,115 @@
+{
+  "_availableValues": {
+    "event": ["settings.opened", "settings.search_problem"],
+    "provider": ["beatleader"],
+    "visit": ["first", "returning"],
+    "previousOutcome": ["none", "cleared", "failed", "quit"]
+  },
+  "schemaVersion": 1,
+  "id": "BotLocator",
+  "displayName": "BotLocator",
+  "defaultEmotion": "default",
+  "emotions": {
+    "default": "BeatLocator.Assets.botlocator_default.png"
+  },
+  "dialogue": [
+    {
+      "id": "settings.opened.default",
+      "event": "settings.opened",
+      "emotion": "default",
+      "priority": 0,
+      "weight": 1.0,
+      "texts": ["I promise I won't make you play Camellia songs (I probably will)", 
+        "Sometimes I think... but then I forget", 
+        "I am legally obligated to serve you some songs",
+        "How's your day going? Mine just started when you booted the game",
+        "Take your time and select what you want to play, I'll wait",
+        "You know what *takes your sabers*",
+        "They put something in Beat that makes you Saber",
+        "If you select end me, I will put all of the responsibility on you",
+        "Let's see what I can find"],
+      "authoringHint": "Общая fallback-реплика при входе на экран BeatLeader."
+    },
+    {
+      "id": "settings.opened.first_visit",
+      "event": "settings.opened",
+      "when": { "visit": "first" },
+      "emotion": "default",
+      "priority": 0,
+      "weight": 1.0,
+      "texts": ["Long time no see, my friend!", 
+        "Thanks for opening the game again, i was getting lonely",
+        "New session will begin shortly...",
+        "Welcome back, player",
+        "Ready for some plays?",
+        "Welcome back, don't forget to warm up",
+        "Thanks for returning! (at least I hope you planned to get here)",
+        "About time",
+        "How's it going my friend!",
+        "Let's play some maps and have fun! (as long as you don't select END ME)",
+        "Back for more pain? I respect that.",
+        "Did you miss me, or are you just here for the pp?",
+        "Your wrists better be ready for this session.",
+        "Great to see you again! Let's hit some notes.",
+        "Running skill-check diagnostic... outcome looks promising.",
+        "Loading your maps... Try not to fail on the intro this time.",
+        "Ah, my favorite player (don't tell the others).",
+        "Welcome back! Ready to ruin your accuracy stats?"],
+      "authoringHint": "Первое открытие экрана BeatLeader в текущем запуске игры."
+    },
+    {
+      "id": "settings.opened.returning",
+      "event": "settings.opened",
+      "when": { "visit": "returning", "previousOutcome": "none" },
+      "emotion": "default",
+      "priority": 0,
+      "weight": 1.0,
+      "texts": [],
+      "authoringHint": "Повторный вход на экран, когда roulette-уровень ещё не был завершён."
+    },
+    {
+      "id": "settings.opened.after_clear",
+      "event": "settings.opened",
+      "when": { "previousOutcome": "cleared" },
+      "emotion": "default",
+      "priority": 10,
+      "weight": 1.0,
+      "texts": [],
+      "authoringHint": "Вход после успешно пройденной roulette-карты."
+    },
+    {
+      "id": "settings.opened.after_fail",
+      "event": "settings.opened",
+      "when": { "previousOutcome": "failed" },
+      "emotion": "default",
+      "priority": 10,
+      "weight": 1.0,
+      "texts": [],
+      "authoringHint": "Вход после проваленной roulette-карты."
+    },
+    {
+      "id": "settings.opened.after_quit",
+      "event": "settings.opened",
+      "when": { "previousOutcome": "quit" },
+      "emotion": "default",
+      "priority": 10,
+      "weight": 1.0,
+      "texts": ["Was it really that bad?",
+        "My numbers are not happy rn",
+        "Leaving? Right in the middle of my favourite map?",
+        "I hope you have a good reason to leave",
+        "Okay, i get it. Let's find another",
+        "Yeah, i agree. That map wasn't for you"],
+      "authoringHint": "Вход после выхода из roulette-карты."
+    },
+    {
+      "id": "settings.search_problem.default",
+      "event": "settings.search_problem",
+      "emotion": "default",
+      "priority": 0,
+      "weight": 1.0,
+      "texts": [],
+      "authoringHint": "Общая реплика, если поиск не дал карту, завершился по таймауту или упал с ошибкой. Не утверждайте конкретную причину."
+    }
+  ]
+}

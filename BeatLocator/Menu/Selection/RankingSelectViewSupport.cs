@@ -19,12 +19,30 @@ internal static class RankingSelectViewSupport
     internal const string ExitIconResource = "BeatLocator.Assets.x_mark.png";
     internal const string CrossButtonResource =
         "BeatLocator.Assets.cross_button.png";
+    internal const string CrossHoverResource =
+        "BeatLocator.Assets.cross_hover.png";
     internal const string SelectedButtonResource =
         "BeatLocator.Assets.button_bg_selected.png";
     internal const string UnselectedButtonResource =
         "BeatLocator.Assets.button_bg_not_selected.png";
     internal const string SelectionRowBackgroundResource =
         "BeatLocator.Assets.bg_duration.png";
+    internal const string SelectedModifierResource =
+        "BeatLocator.Assets.selected_modifier.png";
+    internal const string UnselectedModifierResource =
+        "BeatLocator.Assets.unselected_modifier.png";
+    internal const string FindMapsButtonResource =
+        "BeatLocator.Assets.find_maps_button.png";
+    internal const string FindMapsHoverButtonResource =
+        "BeatLocator.Assets.find_maps_hover_button.png";
+    internal const string HoverModifierResource =
+        "BeatLocator.Assets.hover_modifier.png";
+    internal const string HoverButtonResource =
+        "BeatLocator.Assets.button_bg_hover.png";
+    internal const string BotSpeechBubbleResource =
+        "BeatLocator.Assets.bot_speech_bubble.png";
+    internal const string DefaultBotResource =
+        "BeatLocator.Assets.botlocator_default.png";
     private static readonly Dictionary<string, Sprite> SpriteCache =
         new Dictionary<string, Sprite>(StringComparer.Ordinal);
 

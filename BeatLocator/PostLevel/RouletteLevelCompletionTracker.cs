@@ -1,5 +1,6 @@
 using System;
 using BeatLocator.EvaluationManagers;
+using BeatLocator.Dialogue;
 using Zenject;
 
 namespace BeatLocator.PostLevel;
@@ -15,17 +16,20 @@ internal sealed class RouletteLevelCompletionTracker : IInitializable, IDisposab
     private readonly RoulettePlaySessionManager _sessionManager;
     private readonly PostLevelPpResolver _ppResolver;
     private readonly PostLevelUiState _uiState;
+    private readonly BotDialogueSessionState _botDialogueSessionState;
 
     public RouletteLevelCompletionTracker(
         StandardLevelScenesTransitionSetupDataSO transitionSetup,
         RoulettePlaySessionManager sessionManager,
         PostLevelPpResolver ppResolver,
-        PostLevelUiState uiState)
+        PostLevelUiState uiState,
+        BotDialogueSessionState botDialogueSessionState)
     {
         _transitionSetup = transitionSetup;
         _sessionManager = sessionManager;
         _ppResolver = ppResolver;
         _uiState = uiState;
+        _botDialogueSessionState = botDialogueSessionState;
     }
 
     public void Initialize()
@@ -80,6 +84,7 @@ internal sealed class RouletteLevelCompletionTracker : IInitializable, IDisposab
             results.levelEndStateType == LevelCompletionResults.LevelEndStateType.Incomplete)
         {
             Plugin.Log.Info($"[PP] Run {session.RunId}: level quit; no PP lookup will be performed.");
+            _botDialogueSessionState.RecordQuit();
             _uiState.CompleteTerminal(session, false);
             _sessionManager.Release(session.RunId);
             return;
@@ -88,6 +93,7 @@ internal sealed class RouletteLevelCompletionTracker : IInitializable, IDisposab
         if (results.levelEndStateType == LevelCompletionResults.LevelEndStateType.Failed)
         {
             Plugin.Log.Info($"[PP] Run {session.RunId}: LEVEL FAILED; no PP lookup will be performed.");
+            _botDialogueSessionState.RecordFailed();
             // Results are activated while gameplay time is still stopped. Use
             // the synchronous vanilla fade so no failed-results frame renders.
             _ = Menu.BeatLocatorFlowCoordinator.FadeOutActiveForPostLevelTransitionAsync();
@@ -105,6 +111,8 @@ internal sealed class RouletteLevelCompletionTracker : IInitializable, IDisposab
             _sessionManager.Release(session.RunId);
             return;
         }
+
+        _botDialogueSessionState.RecordCleared();
 
         if (results.invalidated)
         {

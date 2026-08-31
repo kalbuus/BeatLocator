@@ -1,6 +1,7 @@
 using Zenject;
 using BeatLocator.Settings;
 using BeatLocator.PostLevel;
+using BeatLocator.Dialogue;
 
 namespace BeatLocator.Installers;
 
@@ -31,6 +32,7 @@ internal class AppInstaller : Installer
         // to the Mod Settings UI for later Apply/OK presses.
         Container.BindInterfacesAndSelfTo<SettingsApplicator>().AsSingle();
         Container.Bind<ISettingsApplier>().To<BeatLocatorSettingsApplier>().AsSingle();
+        Container.Bind<BotDialogueSessionState>().AsSingle();
 
         // Post-level tracking is app-scoped so the armed roulette session survives
         // the Menu -> Gameplay -> Menu scene transition.

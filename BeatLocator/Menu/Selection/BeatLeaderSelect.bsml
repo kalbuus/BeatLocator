@@ -1,6 +1,6 @@
 <vertical id="beatleader-menu-root"
           preferred-width="112"
-          preferred-height="52.5"
+          preferred-height="136"
           child-control-height="false"
           child-control-width="false"
           child-expand-height="false"
@@ -22,7 +22,7 @@
                ignore-layout="true"
                anchor-min="0.5 0.5"
                anchor-max="0.5 0.5"
-               anchored-position="-38 0"
+               anchored-position="-33.5 0"
                size-delta="6.7 6.7"
                preserve-aspect="true" />
         <image id="beatlocator-logo"
@@ -30,7 +30,7 @@
                ignore-layout="true"
                anchor-min="0.5 0.5"
                anchor-max="0.5 0.5"
-               anchored-position="0 0"
+               anchored-position="4.5 0"
                size-delta="63.35 7"
                preserve-aspect="true" />
         <button id="exit-button"
@@ -38,8 +38,8 @@
                 on-click="exitPressed"
                 stroke-visible="false"
                 ignore-layout="true"
-                anchor-pos-x="49"
-                anchor-pos-y="0"
+                anchor-pos-x="63.5"
+                anchor-pos-y="-14.35"
                 preferred-width="6.7"
                 preferred-height="6.7"
                 size-delta="6.7 6.7"
@@ -170,4 +170,127 @@
             <button text="LONG" preferred-width="14.2" preferred-height="6.9" pad="0" />
         </horizontal>
     </horizontal>
+
+    <horizontal id="modifier-options"
+                ignore-layout="true"
+                preferred-width="112"
+                preferred-height="12.65"
+                child-control-width="false"
+                child-control-height="false"
+                child-expand-width="false"
+                child-expand-height="false"
+                child-align="MiddleCenter">
+        <button id="played-modifier-button"
+                text=""
+                stroke-visible="false"
+                on-click="togglePlayed"
+                preferred-height="12.65"
+                pad="0">
+            <image id="played-modifier-icon"
+                   src="BeatLocator.Assets.played_by_me_icon.png"
+                   ignore-layout="true"
+                   preserve-aspect="true" />
+            <text id="played-modifier-title"
+                  text="PLAYED BY ME"
+                  align="Left"
+                  font-size="3"
+                  word-wrap="false" />
+            <text id="played-modifier-description"
+                  text="Maps you've already played"
+                  align="TopLeft"
+                  font-size="2.1"
+                  color="#8294A8"
+                  word-wrap="true" />
+        </button>
+        <button id="two-saber-modifier-button"
+                text=""
+                stroke-visible="false"
+                on-click="toggleTwoSaber"
+                preferred-height="12.65"
+                pad="0">
+            <image id="two-saber-modifier-icon"
+                   src="BeatLocator.Assets.two_saber_icon.png"
+                   ignore-layout="true"
+                   preserve-aspect="true" />
+            <text id="two-saber-modifier-title"
+                  text="TWO SABER ONLY"
+                  align="Left"
+                  font-size="3"
+                  word-wrap="false" />
+            <text id="two-saber-modifier-description"
+                  text="Only maps with two sabers"
+                  align="TopLeft"
+                  font-size="2.1"
+                  color="#8294A8"
+                  word-wrap="true" />
+        </button>
+        <button id="secret-modifier-button"
+                text=""
+                stroke-visible="false"
+                on-click="toggleSecretDifficulty"
+                preferred-height="12.65"
+                pad="0">
+            <image id="secret-modifier-icon"
+                   src="BeatLocator.Assets.secret_difficulty_icon.png"
+                   ignore-layout="true"
+                   preserve-aspect="true" />
+            <text id="secret-modifier-title"
+                  text="SECRET DIFFICULTY"
+                  align="Left"
+                  font-size="3"
+                  word-wrap="false" />
+            <text id="secret-modifier-description"
+                  text="Song stars are now a mystery"
+                  align="TopLeft"
+                  font-size="2.1"
+                  color="#8294A8"
+                  word-wrap="true" />
+        </button>
+    </horizontal>
+
+    <horizontal id="bot-speech-row"
+                ignore-layout="true"
+                preferred-width="112"
+                preferred-height="12"
+                child-control-width="false"
+                child-control-height="false"
+                child-expand-width="false"
+                child-expand-height="false"
+                child-align="MiddleCenter">
+        <button id="bot-button"
+                text=""
+                stroke-visible="false"
+                on-click="toggleBotSpeech"
+                ignore-layout="true"
+                preferred-width="11"
+                preferred-height="11"
+                pad="0">
+            <image id="bot-artwork"
+                   ignore-layout="true"
+                   preserve-aspect="true" />
+        </button>
+        <image id="bot-speech-background"
+               ignore-layout="true"
+               preserve-aspect="false" />
+        <text id="bot-speech-text"
+              text=""
+              ignore-layout="true"
+              align="MidlineLeft"
+              font-size="3"
+              color="#FFFFFF"
+              word-wrap="true" />
+    </horizontal>
+
+    <button id="find-button"
+            text=""
+            stroke-visible="false"
+            on-click="findPressed"
+            ignore-layout="true"
+            preferred-width="112"
+            preferred-height="11.5"
+            pad="0">
+        <image id="find-artwork"
+               ignore-layout="true"
+               preserve-aspect="false" />
+    </button>
 </vertical>

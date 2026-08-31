@@ -20,6 +20,7 @@ internal sealed class SelectionOptionButtonVisual : MonoBehaviour
 
     private Image _idleBackground = null!;
     private Image _selectedBackground = null!;
+    private ButtonHoverFadeVisual _hoverVisual = null!;
     private TMP_Text _label = null!;
     private float _currentSelection;
     private float _targetSelection;
@@ -30,6 +31,8 @@ internal sealed class SelectionOptionButtonVisual : MonoBehaviour
         TMP_Text label,
         Sprite idleSprite,
         Sprite selectedSprite,
+        Sprite hoverSprite,
+        ButtonHoverFadeGroup hoverGroup,
         bool selected)
     {
         _label = label;
@@ -50,6 +53,14 @@ internal sealed class SelectionOptionButtonVisual : MonoBehaviour
             selectedSprite,
             1,
             rendererTemplate);
+        _hoverVisual = button.gameObject
+            .AddComponent<ButtonHoverFadeVisual>();
+        _hoverVisual.Initialize(
+            button,
+            hoverSprite,
+            rendererTemplate,
+            hoverGroup,
+            2);
 
         label.fontStyle |= FontStyles.Bold | FontStyles.Italic;
         label.fontSize = GetFontSize(label.text);
@@ -59,12 +70,14 @@ internal sealed class SelectionOptionButtonVisual : MonoBehaviour
 
         _currentSelection = selected ? 1f : 0f;
         _targetSelection = _currentSelection;
+        _hoverVisual.SetHoverEnabled(!selected);
         ApplyFade();
     }
 
     internal void SetSelected(bool selected)
     {
         _targetSelection = selected ? 1f : 0f;
+        _hoverVisual.SetHoverEnabled(!selected);
         if (Mathf.Approximately(_currentSelection, _targetSelection))
         {
             return;
