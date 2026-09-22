@@ -266,8 +266,8 @@ internal sealed class ModifierButtonVisual : MonoBehaviour,
         hitTargetRect.SetAsLastSibling();
         hitTargetRect.anchorMin = Vector2.zero;
         hitTargetRect.anchorMax = Vector2.one;
-        hitTargetRect.offsetMin = Vector2.zero;
-        hitTargetRect.offsetMax = Vector2.zero;
+        hitTargetRect.offsetMin = new Vector2(0f, -0.45f);
+        hitTargetRect.offsetMax = new Vector2(0f, 0.45f);
 
         var hitTarget = hitTargetObject.GetComponent<Image>();
         hitTarget.color = Color.clear;

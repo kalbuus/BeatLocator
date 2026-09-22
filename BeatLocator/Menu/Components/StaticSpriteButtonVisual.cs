@@ -7,7 +7,10 @@ namespace BeatLocator.Menu;
 
 internal static class StaticSpriteButtonVisual
 {
-    internal static void Initialize(Button button, Image artwork)
+    internal static void Initialize(
+        Button button,
+        Image artwork,
+        Vector2 raycastPadding = default)
     {
         button.transition = Selectable.Transition.None;
         button.targetGraphic = null;
@@ -47,10 +50,12 @@ internal static class StaticSpriteButtonVisual
 
         artwork.rectTransform.SetAsLastSibling();
         artwork.enabled = true;
-        button.targetGraphic = CreateHitTarget(button);
+        button.targetGraphic = CreateHitTarget(button, raycastPadding);
     }
 
-    private static Image CreateHitTarget(Button button)
+    private static Image CreateHitTarget(
+        Button button,
+        Vector2 raycastPadding)
     {
         var hitTargetObject = new GameObject(
             "HitTarget",
@@ -62,8 +67,8 @@ internal static class StaticSpriteButtonVisual
         hitTargetRect.SetAsLastSibling();
         hitTargetRect.anchorMin = Vector2.zero;
         hitTargetRect.anchorMax = Vector2.one;
-        hitTargetRect.offsetMin = Vector2.zero;
-        hitTargetRect.offsetMax = Vector2.zero;
+        hitTargetRect.offsetMin = -raycastPadding;
+        hitTargetRect.offsetMax = raycastPadding;
 
         var hitTarget = hitTargetObject.GetComponent<Image>();
         hitTarget.color = Color.clear;

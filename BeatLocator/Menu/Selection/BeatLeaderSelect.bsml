@@ -78,8 +78,8 @@
                preserve-aspect="true"
                size-delta="6 6" />
         <text id="difficulty-label"
-              text="&lt;b&gt;DIFFICULTY&lt;/b&gt;&#10;&lt;size=70%&gt;&lt;color=#77889D&gt;How hard should it be?&lt;/color&gt;&lt;/size&gt;"
-              align="MidlineLeft" font-size="3.2" word-wrap="false"
+              text="DIFFICULTY&#10;&lt;size=76%&gt;&lt;color=#9AABBE&gt;How hard should it be?&lt;/color&gt;&lt;/size&gt;"
+              align="MidlineLeft" font-size="3.4" word-wrap="false"
               preferred-width="29" preferred-height="8" size-delta="29 8" />
         <horizontal id="difficulty-options" preferred-width="73.4" preferred-height="6.9" spacing="0.6"
                     child-control-width="false" child-control-height="false"
@@ -117,8 +117,8 @@
                preserve-aspect="true"
                size-delta="6 6" />
         <text id="balance-label"
-              text="&lt;b&gt;BALANCE&lt;/b&gt;&#10;&lt;size=70%&gt;&lt;color=#77889D&gt;What kind of map?&lt;/color&gt;&lt;/size&gt;"
-              align="MidlineLeft" font-size="3.2" word-wrap="false"
+              text="BALANCE&#10;&lt;size=76%&gt;&lt;color=#9AABBE&gt;What kind of map?&lt;/color&gt;&lt;/size&gt;"
+              align="MidlineLeft" font-size="3.4" word-wrap="false"
               preferred-width="29" preferred-height="8" size-delta="29 8" />
         <horizontal id="balance-options" preferred-width="73.4" preferred-height="6.9" spacing="0.6"
                     child-control-width="false" child-control-height="false"
@@ -156,8 +156,8 @@
                preserve-aspect="true"
                size-delta="6 6" />
         <text id="duration-label"
-              text="&lt;b&gt;DURATION&lt;/b&gt;&#10;&lt;size=70%&gt;&lt;color=#77889D&gt;How long should it be?&lt;/color&gt;&lt;/size&gt;"
-              align="MidlineLeft" font-size="3.2" word-wrap="false"
+              text="DURATION&#10;&lt;size=76%&gt;&lt;color=#9AABBE&gt;How long should it be?&lt;/color&gt;&lt;/size&gt;"
+              align="MidlineLeft" font-size="3.4" word-wrap="false"
               preferred-width="29" preferred-height="8" size-delta="29 8" />
         <horizontal id="duration-options" preferred-width="73.4" preferred-height="6.9" spacing="0.6"
                     child-control-width="false" child-control-height="false"
@@ -193,13 +193,13 @@
             <text id="played-modifier-title"
                   text="PLAYED BY ME"
                   align="Left"
-                  font-size="3"
+                  font-size="3.2"
                   word-wrap="false" />
             <text id="played-modifier-description"
                   text="Maps you've already played"
                   align="TopLeft"
-                  font-size="2.1"
-                  color="#8294A8"
+                  font-size="2.3"
+                  color="#A0B1C4"
                   word-wrap="true" />
         </button>
         <button id="two-saber-modifier-button"
@@ -215,13 +215,13 @@
             <text id="two-saber-modifier-title"
                   text="TWO SABER ONLY"
                   align="Left"
-                  font-size="3"
+                  font-size="3.2"
                   word-wrap="false" />
             <text id="two-saber-modifier-description"
                   text="Only maps with two sabers"
                   align="TopLeft"
-                  font-size="2.1"
-                  color="#8294A8"
+                  font-size="2.3"
+                  color="#A0B1C4"
                   word-wrap="true" />
         </button>
         <button id="secret-modifier-button"
@@ -237,13 +237,13 @@
             <text id="secret-modifier-title"
                   text="SECRET DIFFICULTY"
                   align="Left"
-                  font-size="3"
+                  font-size="3.2"
                   word-wrap="false" />
             <text id="secret-modifier-description"
                   text="Song stars are now a mystery"
                   align="TopLeft"
-                  font-size="2.1"
-                  color="#8294A8"
+                  font-size="2.3"
+                  color="#A0B1C4"
                   word-wrap="true" />
         </button>
     </horizontal>

@@ -18,7 +18,8 @@ internal sealed class ButtonHoverFadeVisual : MonoBehaviour,
 
     private Button _button = null!;
     private ButtonHoverFadeGroup _group = null!;
-    private Image _hoverArtwork = null!;
+    private Image? _hoverArtwork;
+    private Image? _crossFadeArtwork;
     private MotionScope _motion = null!;
     private float _hoverAmount;
     private bool _hoverEnabled = true;
@@ -28,7 +29,10 @@ internal sealed class ButtonHoverFadeVisual : MonoBehaviour,
         Sprite hoverSprite,
         Image rendererTemplate,
         ButtonHoverFadeGroup group,
-        int siblingIndex = -1)
+        int siblingIndex = -1,
+        bool matchArtworkRect = false,
+        bool crossFadeArtwork = false,
+        float horizontalVisualBleed = 0f)
     {
         _button = button;
         _group = group;
@@ -41,30 +45,49 @@ internal sealed class ButtonHoverFadeVisual : MonoBehaviour,
             typeof(CanvasRenderer));
         hoverObject.layer = rendererTemplate.gameObject.layer;
         var hoverRect = (RectTransform)hoverObject.transform;
-        hoverRect.SetParent(button.transform, false);
-        if (siblingIndex >= 0)
+        if (matchArtworkRect)
         {
-            hoverRect.SetSiblingIndex(siblingIndex);
+            // Parenting the hover to the artwork guarantees that curved-HMUI
+            // layout cannot give the two sprites different rendered sizes.
+            hoverRect.SetParent(rendererTemplate.transform, false);
+            hoverRect.anchorMin = Vector2.zero;
+            hoverRect.anchorMax = Vector2.one;
+            hoverRect.offsetMin = new Vector2(
+                -horizontalVisualBleed,
+                0f);
+            hoverRect.offsetMax = new Vector2(
+                horizontalVisualBleed,
+                0f);
+            hoverRect.localScale = Vector3.one;
         }
         else
         {
-            hoverRect.SetAsLastSibling();
+            hoverRect.SetParent(button.transform, false);
+            if (siblingIndex >= 0)
+            {
+                hoverRect.SetSiblingIndex(siblingIndex);
+            }
+            else
+            {
+                hoverRect.SetAsLastSibling();
+            }
+            hoverRect.anchorMin = Vector2.zero;
+            hoverRect.anchorMax = Vector2.one;
+            hoverRect.offsetMin = Vector2.zero;
+            hoverRect.offsetMax = Vector2.zero;
+            hoverRect.localScale = Vector3.one;
         }
-
-        hoverRect.anchorMin = Vector2.zero;
-        hoverRect.anchorMax = Vector2.one;
-        hoverRect.offsetMin = Vector2.zero;
-        hoverRect.offsetMax = Vector2.zero;
-        hoverRect.localScale = Vector3.one;
 
         _hoverArtwork = (Image)hoverObject.AddComponent(
             rendererTemplate.GetType());
         _hoverArtwork.sprite = hoverSprite;
         _hoverArtwork.type = Image.Type.Simple;
-        _hoverArtwork.preserveAspect = false;
+        _hoverArtwork.preserveAspect = matchArtworkRect;
         _hoverArtwork.material = rendererTemplate.material;
         _hoverArtwork.color = Color.white;
         _hoverArtwork.raycastTarget = false;
+
+        _crossFadeArtwork = crossFadeArtwork ? rendererTemplate : null;
         SetHoverAmount(0f);
     }
 
@@ -97,7 +120,8 @@ internal sealed class ButtonHoverFadeVisual : MonoBehaviour,
 
     private void AnimateTo(float target)
     {
-        if (!_hoverArtwork || Mathf.Approximately(_hoverAmount, target))
+        if (!_hoverArtwork ||
+            Mathf.Approximately(_hoverAmount, target))
         {
             return;
         }
@@ -113,10 +137,17 @@ internal sealed class ButtonHoverFadeVisual : MonoBehaviour,
     private void SetHoverAmount(float amount)
     {
         _hoverAmount = amount;
-        if (_hoverArtwork)
+        var hoverArtwork = _hoverArtwork;
+        var crossFadeArtwork = _crossFadeArtwork;
+        if (hoverArtwork is not null && hoverArtwork)
         {
-            _hoverArtwork.canvasRenderer.SetColor(
+            hoverArtwork.canvasRenderer.SetColor(
                 new Color(1f, 1f, 1f, amount));
+        }
+        if (crossFadeArtwork is not null && crossFadeArtwork)
+        {
+            crossFadeArtwork.canvasRenderer.SetColor(
+                new Color(1f, 1f, 1f, 1f - amount));
         }
     }
 

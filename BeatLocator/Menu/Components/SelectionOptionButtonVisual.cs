@@ -15,7 +15,7 @@ internal sealed class SelectionOptionButtonVisual : MonoBehaviour
 {
     private const float FadeDurationSeconds = 0.14f;
     private static readonly Color IdleTextColor =
-        new Color(0.48f, 0.55f, 0.63f, 1f);
+        new Color(0.60f, 0.67f, 0.75f, 1f);
     private static readonly Color SelectedTextColor = Color.white;
 
     private Image _idleBackground = null!;
@@ -33,7 +33,8 @@ internal sealed class SelectionOptionButtonVisual : MonoBehaviour
         Sprite selectedSprite,
         Sprite hoverSprite,
         ButtonHoverFadeGroup hoverGroup,
-        bool selected)
+        bool selected,
+        float horizontalVisualBleed = 0f)
     {
         _label = label;
         _motion = MotionUtils.Motion.For(this);
@@ -46,13 +47,15 @@ internal sealed class SelectionOptionButtonVisual : MonoBehaviour
             "IdleBackground",
             idleSprite,
             0,
-            rendererTemplate);
+            rendererTemplate,
+            horizontalVisualBleed);
         _selectedBackground = CreateBackground(
             button.transform,
             "SelectedBackground",
             selectedSprite,
             1,
-            rendererTemplate);
+            rendererTemplate,
+            horizontalVisualBleed);
         _hoverVisual = button.gameObject
             .AddComponent<ButtonHoverFadeVisual>();
         _hoverVisual.Initialize(
@@ -60,12 +63,14 @@ internal sealed class SelectionOptionButtonVisual : MonoBehaviour
             hoverSprite,
             rendererTemplate,
             hoverGroup,
-            2);
+            2,
+            horizontalVisualBleed: horizontalVisualBleed);
 
         label.fontStyle |= FontStyles.Bold | FontStyles.Italic;
         label.fontSize = GetFontSize(label.text);
         label.enableWordWrapping = false;
         label.alignment = TextAlignmentOptions.Center;
+        CenterLabel(label.rectTransform);
         button.targetGraphic = CreateHitTarget(button);
 
         _currentSelection = selected ? 1f : 0f;
@@ -115,7 +120,8 @@ internal sealed class SelectionOptionButtonVisual : MonoBehaviour
         string name,
         Sprite sprite,
         int siblingIndex,
-        Image rendererTemplate)
+        Image rendererTemplate,
+        float horizontalVisualBleed)
     {
         var backgroundObject = new GameObject(
             name,
@@ -128,28 +134,42 @@ internal sealed class SelectionOptionButtonVisual : MonoBehaviour
         backgroundRect.SetSiblingIndex(siblingIndex);
         backgroundRect.anchorMin = Vector2.zero;
         backgroundRect.anchorMax = Vector2.one;
-        backgroundRect.offsetMin = Vector2.zero;
-        backgroundRect.offsetMax = Vector2.zero;
+        backgroundRect.offsetMin = new Vector2(
+            -horizontalVisualBleed,
+            0f);
+        backgroundRect.offsetMax = new Vector2(
+            horizontalVisualBleed,
+            0f);
 
-        var background = (Image)backgroundObject.AddComponent(
+        var image = (Image)backgroundObject.AddComponent(
             rendererTemplate.GetType());
-        background.sprite = sprite;
-        background.type = Image.Type.Simple;
-        background.preserveAspect = false;
-        background.material = rendererTemplate.material;
-        background.color = Color.white;
-        background.raycastTarget = false;
-        return background;
+        image.sprite = sprite;
+        image.type = Image.Type.Simple;
+        image.preserveAspect = false;
+        image.material = rendererTemplate.material;
+        image.color = Color.white;
+        image.raycastTarget = false;
+        return image;
     }
 
     private static float GetFontSize(string text)
     {
         if (text.Length >= 9)
         {
-            return 2.2f;
+            return 2.35f;
         }
 
-        return text.Length >= 8 ? 2.25f : 2.45f;
+        return text.Length >= 8 ? 2.4f : 2.6f;
+    }
+
+    private static void CenterLabel(RectTransform labelRect)
+    {
+        labelRect.anchorMin = Vector2.zero;
+        labelRect.anchorMax = Vector2.one;
+        labelRect.pivot = new Vector2(0.5f, 0.5f);
+        labelRect.offsetMin = new Vector2(0f, -0.15f);
+        labelRect.offsetMax = new Vector2(0f, -0.15f);
+        labelRect.localScale = Vector3.one;
     }
 
     private static void RemoveNativeVisuals(Button button, TMP_Text label)
@@ -209,12 +229,13 @@ internal sealed class SelectionOptionButtonVisual : MonoBehaviour
         hitTargetRect.SetAsLastSibling();
         hitTargetRect.anchorMin = Vector2.zero;
         hitTargetRect.anchorMax = Vector2.one;
-        hitTargetRect.offsetMin = Vector2.zero;
-        hitTargetRect.offsetMax = Vector2.zero;
+        hitTargetRect.offsetMin = new Vector2(0f, -0.45f);
+        hitTargetRect.offsetMax = new Vector2(0f, 0.45f);
 
         var hitTarget = hitTargetObject.GetComponent<Image>();
         hitTarget.color = Color.clear;
         hitTarget.raycastTarget = true;
         return hitTarget;
     }
+
 }

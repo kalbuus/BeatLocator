@@ -19,6 +19,10 @@ namespace BeatLocator.Menu;
 /// </summary>
 public sealed class BeatLeaderSelect : BSMLAutomaticViewController
 {
+    private static readonly Color BeatLeaderRowAccent =
+        new Color32(255, 0, 128, 255);
+    private static readonly Color BeatLeaderModifierAccent =
+        new Color32(47, 198, 255, 255);
     private const float BotSpeechLargeFontSize = 3.2f;
     private const float BotSpeechTwoLineFontSize = 2.7f;
     private const float BotSpeechMinimumFontSize = 2.2f;
@@ -226,6 +230,7 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
             RankingSelectViewSupport.FindMapsHoverButtonResource);
 
         LayoutMenu();
+        TintProviderIcons();
 
         _hoverFadeGroup = _menuRoot.gameObject
             .AddComponent<ButtonHoverFadeGroup>();
@@ -233,7 +238,10 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
         _exitArtwork.sprite = RankingSelectViewSupport.LoadSprite(
             RankingSelectViewSupport.CrossButtonResource);
         _exitArtwork.preserveAspect = true;
-        StaticSpriteButtonVisual.Initialize(_exitButton, _exitArtwork);
+        StaticSpriteButtonVisual.Initialize(
+            _exitButton,
+            _exitArtwork,
+            new Vector2(1.2f, 1.2f));
         var exitHoverVisual = _exitButton.gameObject
             .AddComponent<ButtonHoverFadeVisual>();
         exitHoverVisual.Initialize(
@@ -241,13 +249,18 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
             RankingSelectViewSupport.LoadSprite(
                 RankingSelectViewSupport.CrossHoverResource),
             _exitArtwork,
-            _hoverFadeGroup);
+            _hoverFadeGroup,
+            matchArtworkRect: true,
+            crossFadeArtwork: true);
 
         _botSprite ??= RankingSelectViewSupport.LoadSprite(
             _botDialogueService.DefaultSpriteResource);
         _botArtwork.sprite = _botSprite;
         _botArtwork.preserveAspect = true;
-        StaticSpriteButtonVisual.Initialize(_botButton, _botArtwork);
+        StaticSpriteButtonVisual.Initialize(
+            _botButton,
+            _botArtwork,
+            new Vector2(0.6f, 0.6f));
 
         _botSpeechBackground.sprite = RankingSelectViewSupport.LoadSprite(
             RankingSelectViewSupport.BotSpeechBubbleResource);
@@ -256,7 +269,10 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
         _findArtwork.sprite = RankingSelectViewSupport.LoadSprite(
             RankingSelectViewSupport.FindMapsButtonResource);
         _findArtwork.raycastTarget = false;
-        StaticSpriteButtonVisual.Initialize(_findButton, _findArtwork);
+        StaticSpriteButtonVisual.Initialize(
+            _findButton,
+            _findArtwork,
+            new Vector2(0.6f, 0.8f));
         _findHoverVisual = _findButton.gameObject
             .AddComponent<ButtonHoverFadeVisual>();
         _findHoverVisual.Initialize(
@@ -445,12 +461,23 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
         _flowCoordinator.ShowSelect();
     }
 
+    internal bool PrepareForFirstPresentation()
+    {
+        if (_visualsInitialized) return false;
+
+        ParseWithFallback();
+        return _visualsInitialized;
+    }
+
     protected override void DidActivate(
         bool firstActivation,
         bool addedToHierarchy,
         bool screenSystemEnabling)
     {
-        base.DidActivate(firstActivation, addedToHierarchy, screenSystemEnabling);
+        base.DidActivate(
+            firstActivation && !_visualsInitialized,
+            addedToHierarchy,
+            screenSystemEnabling);
         LayoutMenu();
         SyncSelections();
         _botDialogueVisit = _botDialogueSessionState.RegisterSettingsVisit();
@@ -777,6 +804,22 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
         backgroundImage.enabled = false;
     }
 
+    private void TintProviderIcons()
+    {
+        TintImage(_difficultyIcon, BeatLeaderRowAccent);
+        TintImage(_balanceIcon, BeatLeaderRowAccent);
+        TintImage(_durationIcon, BeatLeaderRowAccent);
+        TintImage(_playedModifierIcon, BeatLeaderModifierAccent);
+        TintImage(_twoSaberModifierIcon, BeatLeaderModifierAccent);
+        TintImage(_secretModifierIcon, BeatLeaderModifierAccent);
+    }
+
+    private static void TintImage(Image image, Color color)
+    {
+        image.color = Color.white;
+        image.canvasRenderer.SetColor(color);
+    }
+
     private static SelectionOptionButtonVisual[] InitializeOptionGroup(
         RectTransform group,
         int selectedIndex,
@@ -866,7 +909,7 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
         _menuRoot.anchorMin = new Vector2(0.5f, 0.5f);
         _menuRoot.anchorMax = new Vector2(0.5f, 0.5f);
         _menuRoot.pivot = new Vector2(0.5f, 0.5f);
-        _menuRoot.anchoredPosition = new Vector2(0f, 28.5f);
+        _menuRoot.anchoredPosition = new Vector2(0f, 25.8f);
         _menuRoot.sizeDelta = new Vector2(112f, 136f);
         _menuRoot.localScale = Vector3.one;
 
@@ -877,39 +920,43 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
         ConfigureFixedRect(
             _beatLeaderProviderLogo.rectTransform,
             new Vector2(6.7f, 6.7f),
-            new Vector2(-33.5f, 0f));
+            new Vector2(-38.5f, 0f));
         ConfigureFixedRect(
             _beatLocatorLogo.rectTransform,
-            new Vector2(63.35f, 7f),
-            new Vector2(4.5f, 0f));
+            new Vector2(60f, 7f),
+            Vector2.zero);
         ConfigureFixedRect(
             _difficultyRow,
             new Vector2(112f, 12.65f),
-            new Vector2(0f, 7.9f));
+            new Vector2(0f, 7.4f));
         ConfigureFixedRect(
             _balanceRow,
             new Vector2(112f, 12.65f),
-            new Vector2(0f, -6.25f));
+            new Vector2(0f, -6.15f));
         ConfigureFixedRect(
             _durationRow,
             new Vector2(112f, 12.65f),
-            new Vector2(0f, -20.4f));
+            new Vector2(0f, -19.7f));
         ConfigureFixedRect(
             _modifierOptions,
             new Vector2(112f, 12.65f),
-            new Vector2(0f, -34.55f));
+            new Vector2(0f, -33.25f));
         ConfigureFixedRect(
             _botSpeechRow,
             new Vector2(112f, 12f),
-            new Vector2(0f, -48.55f));
+            new Vector2(0f, -46.475f));
         ConfigureFixedRect(
             (RectTransform)_findButton.transform,
             new Vector2(112f, 11.5f),
-            new Vector2(0f, -62.55f));
+            new Vector2(0f, -59.125f));
         ConfigureFixedRect(
             (RectTransform)_exitButton.transform,
             new Vector2(6.7f, 6.7f),
             new Vector2(63.5f, -14.35f));
+        ConfigureFixedRect(
+            _exitArtwork.rectTransform,
+            new Vector2(5.1f, 5.1f),
+            Vector2.zero);
 
         ConfigureRowContent(
             _difficultyRow,
@@ -954,19 +1001,19 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
         ConfigureFixedRect(
             (RectTransform)_botButton.transform,
             new Vector2(11f, 11f),
-            new Vector2(-49.5f, 0f));
+            new Vector2(-46.7f, 0f));
         ConfigureFixedRect(
             _botArtwork.rectTransform,
             new Vector2(10.7f, 10f),
             Vector2.zero);
         ConfigureFixedRect(
             _botSpeechBackground.rectTransform,
-            new Vector2(99f, 11.45f),
-            new Vector2(6.5f, 0f));
+            new Vector2(93.3f, 11.45f),
+            new Vector2(9.35f, 0f));
         ConfigureFixedRect(
             _botSpeechText.rectTransform,
-            new Vector2(91f, 8.4f),
-            new Vector2(9f, 0.1f));
+            new Vector2(88f, 8.4f),
+            new Vector2(10.5f, 0.1f));
         _botSpeechText.enableAutoSizing = false;
         _botSpeechText.fontSize = BotSpeechLargeFontSize;
         _botSpeechText.enableWordWrapping = false;
@@ -990,15 +1037,18 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
         ConfigureFixedRect(
             icon.rectTransform,
             new Vector2(6f, 6f),
-            new Vector2(-49.7f, 0f));
+            new Vector2(-50.2f, 0f));
         ConfigureFixedRect(
             label.rectTransform,
             new Vector2(23f, 8f),
-            new Vector2(-33f, 0f));
+            new Vector2(-33.6f, -0.65f));
+        label.fontWeight = FontWeight.SemiBold;
+        label.alignment = TextAlignmentOptions.MidlineLeft;
+        label.lineSpacing = -8f;
         ConfigureFixedRect(
             options,
             new Vector2(73.4f, 6.9f),
-            new Vector2(16.5f, 0f));
+            new Vector2(15.7f, 0f));
 
         var buttons = options.GetComponentsInChildren<Button>(true)
             .OrderBy(button => button.transform.GetSiblingIndex())

@@ -5,6 +5,7 @@ using BeatLocator.PostLevel;
 using BeatLocator.Settings;
 using HMUI;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
@@ -85,6 +86,10 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     private bool _mainFlowSwitchInProgress;
     private int _mainFlowSwitchGeneration;
     private bool _menuLightsDimmed;
+    private Coroutine? _providerPrewarmCoroutine;
+    private Coroutine? _providerOpenCoroutine;
+    private Coroutine? _roulettePrewarmCoroutine;
+    private bool _providerTransitionPending;
     private static BeatLocatorFlowCoordinator? _activeInstance;
 
     [Inject]
@@ -156,26 +161,61 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     internal void ShowBeatLeaderSelect()
     {
+        if (_providerTransitionPending) return;
+        StopProviderPrewarm();
+
         _rankingProvider = RankingProvider.BeatLeader;
         var viewController = _beatLeaderSelect.Value;
+        var preparedNow = viewController.PrepareForFirstPresentation();
         _activeRankingSelect = viewController;
-        ReplaceTopViewController(
-            viewController,
-            null,
-            ViewController.AnimationType.In,
-            ViewController.AnimationDirection.Horizontal);
+        OpenProviderSelect(viewController, preparedNow);
     }
 
     internal void ShowScoreSaberSelect()
     {
+        if (_providerTransitionPending) return;
+        StopProviderPrewarm();
+
         _rankingProvider = RankingProvider.ScoreSaber;
         var viewController = _scoreSaberSelect.Value;
+        var preparedNow = viewController.PrepareForFirstPresentation();
         _activeRankingSelect = viewController;
+        OpenProviderSelect(viewController, preparedNow);
+    }
+
+    private void OpenProviderSelect(ViewController viewController, bool preparedNow)
+    {
+        if (preparedNow)
+        {
+            _providerTransitionPending = true;
+            _providerOpenCoroutine = StartCoroutine(
+                OpenProviderAfterPreparation(viewController));
+            return;
+        }
+
         ReplaceTopViewController(
             viewController,
-            null,
-            ViewController.AnimationType.In,
-            ViewController.AnimationDirection.Horizontal);
+            PrewarmRouletteAfterProviderTransition,
+            ForwardProviderAnimationType,
+            ProviderAnimationDirection);
+    }
+
+    private IEnumerator OpenProviderAfterPreparation(ViewController viewController)
+    {
+        yield return null;
+        _providerOpenCoroutine = null;
+        _providerTransitionPending = false;
+        if (!isActiveAndEnabled || !_selectViewController.Value.isActivated)
+        {
+            _activeRankingSelect = null;
+            yield break;
+        }
+
+        ReplaceTopViewController(
+            viewController,
+            PrewarmRouletteAfterProviderTransition,
+            ForwardProviderAnimationType,
+            ProviderAnimationDirection);
     }
 
     internal void ShowRankingSelect()
@@ -194,8 +234,8 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         ReplaceTopViewController(
             viewController,
             transitionFinished,
-            ViewController.AnimationType.In,
-            ViewController.AnimationDirection.Horizontal);
+            ReverseProviderAnimationType,
+            ProviderAnimationDirection);
     }
 
     internal void PresentPostLevelResult(PostLevelDisplayResult result)
@@ -616,18 +656,73 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         ReplaceTopViewController(
             _selectViewController.Value,
             null,
-            ViewController.AnimationType.In,
-            ViewController.AnimationDirection.Horizontal);
+            ReverseProviderAnimationType,
+            ProviderAnimationDirection);
     }
 
     private void ShowRoulette()
     {
+        var roulette = _rouletteAnimationViewController.Value;
+        var preparedNow = roulette.PrepareForFirstPresentation();
+        if (preparedNow)
+        {
+            StartCoroutine(ShowRouletteAfterPreparation(roulette));
+            return;
+        }
+
         ReplaceTopViewController(
-            _rouletteAnimationViewController.Value,
+            roulette,
             null,
-            ViewController.AnimationType.In,
-            ViewController.AnimationDirection.Horizontal);
+            ForwardProviderAnimationType,
+            ProviderAnimationDirection);
     }
+
+    private IEnumerator ShowRouletteAfterPreparation(ViewController roulette)
+    {
+        yield return null;
+        if (!isActiveAndEnabled) yield break;
+
+        ReplaceTopViewController(
+            roulette,
+            null,
+            ForwardProviderAnimationType,
+            ProviderAnimationDirection);
+    }
+
+    private void PrewarmRouletteAfterProviderTransition()
+    {
+        _roulettePrewarmCoroutine ??= StartCoroutine(PrewarmRouletteView());
+    }
+
+    private IEnumerator PrewarmRouletteView()
+    {
+        yield return null;
+        if (_activeRankingSelect != null &&
+            _activeRankingSelect.isActivated &&
+            !_mapSearchInProgress)
+        {
+            _rouletteAnimationViewController.Value.PrepareForFirstPresentation();
+        }
+        _roulettePrewarmCoroutine = null;
+    }
+
+    // Keep the provider's forward and return paths opposite on the same axis.
+    // BeatLeader's vertical motion is unchanged; ScoreSaber uses the other
+    // horizontal direction from the first implementation.
+    private ViewController.AnimationType ForwardProviderAnimationType =>
+        _rankingProvider == RankingProvider.BeatLeader
+            ? ViewController.AnimationType.Out
+            : ViewController.AnimationType.In;
+
+    private ViewController.AnimationType ReverseProviderAnimationType =>
+        _rankingProvider == RankingProvider.BeatLeader
+            ? ViewController.AnimationType.In
+            : ViewController.AnimationType.Out;
+
+    private ViewController.AnimationDirection ProviderAnimationDirection =>
+        _rankingProvider == RankingProvider.BeatLeader
+            ? ViewController.AnimationDirection.Vertical
+            : ViewController.AnimationDirection.Horizontal;
 
     internal void FindBeatLeaderMapAsync(
         bool played,
@@ -754,6 +849,11 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 if (provider == RankingProvider.ScoreSaber)
                 {
                     _scoreSaberSelect.Value.SetSearchInProgress(false);
+                    if (!startedFromPostLevel && botDialogueEvent != null)
+                    {
+                        _scoreSaberSelect.Value.ShowSearchFailureDialogue(
+                            botDialogueEvent);
+                    }
                 }
                 else
                 {
@@ -1248,12 +1348,51 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         {
             ProvideInitialViewControllers(_selectViewController.Value);
         }
+
+        _providerPrewarmCoroutine ??= StartCoroutine(PrewarmProviderViews());
+    }
+
+    private IEnumerator PrewarmProviderViews()
+    {
+        yield return null;
+        while (_mainFlowCoordinator.isInTransition || isInTransition)
+        {
+            yield return null;
+        }
+
+        // Spread first-time BSML parsing over separate frames after Select is
+        // visible, so it cannot consume either provider's entrance animation.
+        yield return null;
+        _beatLeaderSelect.Value.PrepareForFirstPresentation();
+        yield return null;
+        _scoreSaberSelect.Value.PrepareForFirstPresentation();
+        _providerPrewarmCoroutine = null;
+    }
+
+    private void StopProviderPrewarm()
+    {
+        if (_providerPrewarmCoroutine == null) return;
+
+        StopCoroutine(_providerPrewarmCoroutine);
+        _providerPrewarmCoroutine = null;
     }
 
     protected override void DidDeactivate(
         bool removedFromHierarchy,
         bool screenSystemDisabling)
     {
+        StopProviderPrewarm();
+        if (_providerOpenCoroutine != null)
+        {
+            StopCoroutine(_providerOpenCoroutine);
+            _providerOpenCoroutine = null;
+        }
+        if (_roulettePrewarmCoroutine != null)
+        {
+            StopCoroutine(_roulettePrewarmCoroutine);
+            _roulettePrewarmCoroutine = null;
+        }
+        _providerTransitionPending = false;
         RestoreMenuLights();
     }
 

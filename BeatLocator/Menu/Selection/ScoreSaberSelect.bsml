@@ -1,133 +1,164 @@
-<vertical child-control-height="false" child-expand-height="false" child-expand-width="false" child-align="UpperCenter" spacing="2.5">
-    <horizontal horizontal-fit="PreferredSize"
-                vertical-fit="PreferredSize"
-                child-control-width="false"
-                child-control-height="false"
-                child-expand-width="false"
-                child-expand-height="false"
+<vertical id="scoresaber-menu-root"
+          preferred-width="112"
+          preferred-height="136"
+          child-control-height="false"
+          child-control-width="false"
+          child-expand-height="false"
+          child-expand-width="false"
+          child-align="UpperCenter"
+          spacing="1.5">
+
+    <horizontal id="header-row" ignore-layout="true"
+                preferred-width="112" preferred-height="10"
+                child-control-width="false" child-control-height="false"
+                child-expand-width="false" child-expand-height="false"
                 child-align="MiddleCenter">
-        <image src="BeatLocator.Assets.ss_logo.png"
-               ignore-layout="true"
-               anchor-min="0.5 0.5"
-               anchor-max="0.5 0.5"
-               anchored-position="-35.5 0"
-               size-delta="5.33 5.33"
-               preserve-aspect="true" />
-        <horizontal bg="panel-top" pad-left="7" pad-right="7" pad-top="3" pad-bottom="3" horizontal-fit="PreferredSize" vertical-fit="PreferredSize">
-            <image src="BeatLocator.Assets.logo.png"
-                   pref-width="45.2"
-                   pref-height="5"
+        <image id="scoresaber-provider-logo"
+               src="BeatLocator.Assets.ss_logo.png"
+               ignore-layout="true" preserve-aspect="true" />
+        <image id="beatlocator-logo"
+               src="BeatLocator.Assets.logo.png"
+               ignore-layout="true" preserve-aspect="true" />
+        <button id="exit-button" text="" on-click="exitPressed"
+                stroke-visible="false" ignore-layout="true"
+                preferred-width="6.7" preferred-height="6.7"
+                size-delta="6.7 6.7" pad="0">
+            <image id="exit-artwork" ignore-layout="true"
                    preserve-aspect="true" />
+        </button>
+    </horizontal>
+
+    <horizontal id="difficulty-row" ignore-layout="true"
+                preferred-width="112" preferred-height="12.65"
+                child-control-width="false" child-control-height="false"
+                child-expand-width="false" child-expand-height="false"
+                child-align="MiddleCenter">
+        <image id="difficulty-row-background" ignore-layout="true"
+               anchor-min="0 0" anchor-max="1 1"
+               anchored-position="0 0" size-delta="0 0" />
+        <image id="difficulty-icon"
+               src="BeatLocator.Assets.difficulty_icon.png"
+               ignore-layout="true" preserve-aspect="true" />
+        <text id="difficulty-label"
+              text="DIFFICULTY&#10;&lt;size=76%&gt;&lt;color=#9AABBE&gt;How hard should it be?&lt;/color&gt;&lt;/size&gt;"
+              align="MidlineLeft" font-size="3.4" word-wrap="false" />
+        <horizontal id="difficulty-options"
+                    preferred-width="73.4" preferred-height="6.9"
+                    child-control-width="false" child-control-height="false"
+                    child-expand-width="false" child-expand-height="false"
+                    child-align="MiddleCenter">
+            <button text="SUPER EASY" preferred-width="14.2" preferred-height="6.9" pad="0" />
+            <button text="EASY" preferred-width="14.2" preferred-height="6.9" pad="0" />
+            <button text="OKAY" preferred-width="14.2" preferred-height="6.9" pad="0" />
+            <button text="A BIT HARD" preferred-width="14.2" preferred-height="6.9" pad="0" />
+            <button text="E N D M E" preferred-width="14.2" preferred-height="6.9" pad="0" />
         </horizontal>
     </horizontal>
 
-    <button id="exit-button"
-            text=""
-            on-click="exitPressed"
-            stroke-visible="false"
-            ignore-layout="true"
-            anchor-pos-x="91"
-            anchor-pos-y="-6"
-            pref-width="6.7"
-            pref-height="6.7"
-            size-delta="6.7 6.7"
-            pad="0">
-        <image id="exit-icon"
-               ignore-layout="true"
-               anchor-min="0.5 0.5"
-               anchor-max="0.5 0.5"
-               anchored-position="0 0"
-               size-delta="3 3"
-               preserve-aspect="true" />
-    </button>
-
-    <!-- Song Difficulty -->
-    <horizontal pad="2"
-                    preferred-width="100"
-                    preferred-height="11"
-                    child-control-width="true"
-                    child-control-height="true"
-                    child-align="MiddleCenter">
-            <text align="Left" text="Difficulty" color="#9E9E9E" />
-            <text-segments id="difficulty-segments" data="difficulties" select-cell="difficultySelected" size-delta-y="7" />
-            <image id="difficulty-selection-slider"
-                   ignore-layout="true" />
-    </horizontal>
-
-    <!-- Song Duration -->
-    <horizontal pad="2"
-                preferred-width="100"
-                preferred-height="11"
-                child-control-width="true"
-                child-control-height="true"
+    <horizontal id="duration-row" ignore-layout="true"
+                preferred-width="112" preferred-height="12.65"
+                child-control-width="false" child-control-height="false"
+                child-expand-width="false" child-expand-height="false"
                 child-align="MiddleCenter">
-            <text align="Left" text="Duration" color="#9E9E9E" />
-            <text-segments id="duration-segments" data="durations" select-cell="durationSelected" size-delta-y="7" />
-            <image id="duration-selection-slider"
-                   ignore-layout="true" />
+        <image id="duration-row-background" ignore-layout="true"
+               anchor-min="0 0" anchor-max="1 1"
+               anchored-position="0 0" size-delta="0 0" />
+        <image id="duration-icon"
+               src="BeatLocator.Assets.duration_icon.png"
+               ignore-layout="true" preserve-aspect="true" />
+        <text id="duration-label"
+              text="DURATION&#10;&lt;size=76%&gt;&lt;color=#9AABBE&gt;How long should it be?&lt;/color&gt;&lt;/size&gt;"
+              align="MidlineLeft" font-size="3.4" word-wrap="false" />
+        <horizontal id="duration-options"
+                    preferred-width="73.4" preferred-height="6.9"
+                    child-control-width="false" child-control-height="false"
+                    child-expand-width="false" child-expand-height="false"
+                    child-align="MiddleCenter">
+            <button text="ANY" preferred-width="14.2" preferred-height="6.9" pad="0" />
+            <button text="SHORT" preferred-width="14.2" preferred-height="6.9" pad="0" />
+            <button text="SMALL" preferred-width="14.2" preferred-height="6.9" pad="0" />
+            <button text="NORMAL" preferred-width="14.2" preferred-height="6.9" pad="0" />
+            <button text="LONG" preferred-width="14.2" preferred-height="6.9" pad="0" />
+        </horizontal>
     </horizontal>
 
-    <!-- Song Played Status -->
-    <horizontal pad="2"
-                    preferred-width="100"
-                    preferred-height="11"
-                    child-control-width="true"
-                    child-control-height="true"
-                    child-expand-width="false"
-                    child-align="MiddleCenter"
-                    spacing="6.5">
-            <text align="Left"
-                  text="Played By Me"
-                  color="#9E9E9E"
-                  preferred-width="32.5" />
-            <text-segments id="played-segments"
-                           data="playedFilters"
-                           select-cell="playedFilterSelected"
-                           preferred-width="57"
-                           size-delta-y="7" />
-            <image id="played-selection-slider"
-                   ignore-layout="true" />
+    <horizontal id="played-row" ignore-layout="true"
+                preferred-width="112" preferred-height="12.65"
+                child-control-width="false" child-control-height="false"
+                child-expand-width="false" child-expand-height="false"
+                child-align="MiddleCenter">
+        <image id="played-row-background" ignore-layout="true"
+               anchor-min="0 0" anchor-max="1 1"
+               anchored-position="0 0" size-delta="0 0" />
+        <image id="played-icon" src="BeatLocator.Assets.played_icon.png"
+               ignore-layout="true" preserve-aspect="true" />
+        <text id="played-label"
+              text="PLAYED BY ME&#10;&lt;size=76%&gt;&lt;color=#9AABBE&gt;Show maps you've played?&lt;/color&gt;&lt;/size&gt;"
+              align="MidlineLeft" font-size="3.4" word-wrap="false" />
+        <horizontal id="played-options"
+                    preferred-width="73.4" preferred-height="6.9"
+                    child-control-width="false" child-control-height="false"
+                    child-expand-width="false" child-expand-height="false"
+                    child-align="MiddleCenter">
+            <button text="ANY" preferred-height="6.9" pad="0" />
+            <button text="PLAYED" preferred-height="6.9" pad="0" />
+            <button text="NEW" preferred-height="6.9" pad="0" />
+        </horizontal>
     </horizontal>
 
-    <horizontal preferred-width="100"
-                    preferred-height="10"
-                    child-control-width="false"
-                    child-control-height="false"
-                    child-expand-width="false"
-                    child-expand-height="false"
-                    child-align="MiddleCenter"
-                    spacing="2">
-            <button id="two-saber-toggle-button"
-                    text=""
-                    stroke-visible="false"
-                    on-click="toggleTwoSaber"
-                    preferred-width="50"
-                    preferred-height="7"
-                    pad="0">
-                <text id="two-saber-toggle-label"
-                      align="Center"
-                      text="Two Saber Only"
-                      font-size="3.1"
-                      word-wrap="false" />
-            </button>
-            <button id="secret-toggle-button"
-                    text=""
-                    stroke-visible="false"
-                    on-click="toggleSecretDifficulty"
-                    preferred-width="50"
-                    preferred-height="7"
-                    pad="0">
-                <text id="secret-toggle-label"
-                      align="Center"
-                      text="Secret Difficulty"
-                      font-size="3.1"
-                      word-wrap="false" />
-            </button>
+    <horizontal id="modifier-options" ignore-layout="true"
+                preferred-width="112" preferred-height="12.65"
+                child-control-width="false" child-control-height="false"
+                child-expand-width="false" child-expand-height="false"
+                child-align="MiddleCenter">
+        <button id="two-saber-modifier-button" text=""
+                stroke-visible="false" on-click="toggleTwoSaber"
+                preferred-height="12.65" pad="0">
+            <image id="two-saber-modifier-icon"
+                   src="BeatLocator.Assets.two_saber_icon.png"
+                   ignore-layout="true" preserve-aspect="true" />
+            <text id="two-saber-modifier-title" text="TWO SABER ONLY"
+                  align="Left" font-size="3.2" word-wrap="false" />
+            <text id="two-saber-modifier-description"
+                  text="Only maps with two sabers" align="TopLeft"
+                  font-size="2.3" color="#A0B1C4" word-wrap="true" />
+        </button>
+        <button id="secret-modifier-button" text=""
+                stroke-visible="false" on-click="toggleSecretDifficulty"
+                preferred-height="12.65" pad="0">
+            <image id="secret-modifier-icon"
+                   src="BeatLocator.Assets.secret_difficulty_icon.png"
+                   ignore-layout="true" preserve-aspect="true" />
+            <text id="secret-modifier-title" text="SECRET DIFFICULTY"
+                  align="Left" font-size="3.2" word-wrap="false" />
+            <text id="secret-modifier-description"
+                  text="Song stars are now a mystery" align="TopLeft"
+                  font-size="2.3" color="#A0B1C4" word-wrap="true" />
+        </button>
     </horizontal>
 
-    <action-button id="find-button"
-                   text="~findButtonText"
-                   on-click="find-btn-action"
-                   preferred-width="95"
-                   preferred-height="11" />
+    <horizontal id="bot-speech-row" ignore-layout="true"
+                preferred-width="112" preferred-height="12"
+                child-control-width="false" child-control-height="false"
+                child-expand-width="false" child-expand-height="false"
+                child-align="MiddleCenter">
+        <button id="bot-button" text="" stroke-visible="false"
+                on-click="toggleBotSpeech" ignore-layout="true"
+                preferred-width="11" preferred-height="11" pad="0">
+            <image id="bot-artwork" ignore-layout="true"
+                   preserve-aspect="true" />
+        </button>
+        <image id="bot-speech-background" ignore-layout="true"
+               preserve-aspect="false" />
+        <text id="bot-speech-text" text="" ignore-layout="true"
+              align="MidlineLeft" font-size="3" color="#FFFFFF"
+              word-wrap="true" />
+    </horizontal>
+
+    <button id="find-button" text="" stroke-visible="false"
+            on-click="findPressed" ignore-layout="true"
+            preferred-width="112" preferred-height="11.5" pad="0">
+        <image id="find-artwork" ignore-layout="true"
+               preserve-aspect="false" />
+    </button>
 </vertical>

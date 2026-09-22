@@ -43,6 +43,32 @@ internal static class RankingSelectViewSupport
         "BeatLocator.Assets.bot_speech_bubble.png";
     internal const string DefaultBotResource =
         "BeatLocator.Assets.botlocator_default.png";
+    internal const string ScoreSaberButtonResource =
+        "BeatLocator.Assets.button_ss.png";
+    internal const string ScoreSaberHoverButtonResource =
+        "BeatLocator.Assets.hover_button_ss.png";
+    internal const string ScoreSaberSelectedButtonResource =
+        "BeatLocator.Assets.selected_button_ss.png";
+    internal const string ScoreSaberLongButtonResource =
+        "BeatLocator.Assets.unselected_long_button_ss.png";
+    internal const string ScoreSaberLongHoverButtonResource =
+        "BeatLocator.Assets.hover_long_button_ss.png";
+    internal const string ScoreSaberLongSelectedButtonResource =
+        "BeatLocator.Assets.selected_long_button_ss.png";
+    internal const string ScoreSaberRowBackgroundResource =
+        "BeatLocator.Assets.bg_duration_ss.png";
+    internal const string ScoreSaberUnselectedModifierResource =
+        "BeatLocator.Assets.unselected_modifier_ss.png";
+    internal const string ScoreSaberSelectedModifierResource =
+        "BeatLocator.Assets.selected_modifier_ss.png";
+    internal const string ScoreSaberHoverModifierResource =
+        "BeatLocator.Assets.hover_modifier_ss.png";
+    internal const string ScoreSaberFindMapsButtonResource =
+        "BeatLocator.Assets.find_maps_button_ss.png";
+    internal const string ScoreSaberFindMapsHoverResource =
+        "BeatLocator.Assets.selected_find_maps_button_ss.png";
+    internal const string ScoreSaberBotResource =
+        "BeatLocator.Assets.botlocator_ss.png";
     private static readonly Dictionary<string, Sprite> SpriteCache =
         new Dictionary<string, Sprite>(StringComparer.Ordinal);
 
@@ -191,5 +217,58 @@ internal static class RankingSelectViewSupport
             borderPixels);
         SpriteCache[cacheKey] = slicedSprite;
         return slicedSprite;
+    }
+
+    internal static Sprite LoadDuotoneSprite(
+        string resourceName,
+        Color shadowColor,
+        Color highlightColor)
+    {
+        var cacheKey = resourceName + "|duotone|" +
+                       ColorUtility.ToHtmlStringRGBA(shadowColor) + "|" +
+                       ColorUtility.ToHtmlStringRGBA(highlightColor);
+        if (SpriteCache.TryGetValue(cacheKey, out var cachedSprite) &&
+            cachedSprite)
+        {
+            return cachedSprite;
+        }
+
+        var source = LoadSprite(resourceName);
+        var sourceTexture = source.texture;
+        var pixels = sourceTexture.GetPixels32();
+        for (var index = 0; index < pixels.Length; index++)
+        {
+            var sourceColor = (Color)pixels[index];
+            var brightness = Mathf.Max(
+                sourceColor.r,
+                Mathf.Max(sourceColor.g, sourceColor.b));
+            var accentAmount = Mathf.InverseLerp(0.26f, 0.68f, brightness);
+            var mappedColor = Color.Lerp(
+                shadowColor,
+                highlightColor,
+                accentAmount);
+            mappedColor.a = sourceColor.a;
+            pixels[index] = mappedColor;
+        }
+
+        var texture = new Texture2D(
+            sourceTexture.width,
+            sourceTexture.height,
+            TextureFormat.RGBA32,
+            false)
+        {
+            filterMode = sourceTexture.filterMode,
+            wrapMode = sourceTexture.wrapMode
+        };
+        texture.SetPixels32(pixels);
+        texture.Apply();
+
+        var sprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, texture.width, texture.height),
+            new Vector2(0.5f, 0.5f),
+            100f);
+        SpriteCache[cacheKey] = sprite;
+        return sprite;
     }
 }

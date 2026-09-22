@@ -128,6 +128,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     private string? _previewUrl;
     private PrimaryButtonState _primaryButtonState;
     private MotionScope? _motion;
+    private bool _contentPrepared;
 
     private enum PrimaryButtonState
     {
@@ -210,6 +211,15 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         PrepareSongDetails();
         PreparePreviewAudio();
         PrepareRouletteAudio();
+        _contentPrepared = true;
+    }
+
+    internal bool PrepareForFirstPresentation()
+    {
+        if (_contentPrepared) return false;
+
+        ParseWithFallback();
+        return _contentPrepared;
     }
 
     protected override void DidActivate(
@@ -217,7 +227,10 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         bool addedToHierarchy,
         bool screenSystemEnabling)
     {
-        base.DidActivate(firstActivation, addedToHierarchy, screenSystemEnabling);
+        base.DidActivate(
+            firstActivation && !_contentPrepared,
+            addedToHierarchy,
+            screenSystemEnabling);
         _rouletteRoot.gameObject.SetActive(true);
 
         if ((addedToHierarchy || screenSystemEnabling) && _selectedDifficulty != null)

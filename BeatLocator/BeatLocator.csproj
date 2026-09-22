@@ -73,6 +73,8 @@
         <EmbeddedResource Include="Assets\balance_icon.png" />
         <None Remove="Assets\duration_icon.png" />
         <EmbeddedResource Include="Assets\duration_icon.png" />
+        <None Remove="Assets\played_icon.png" />
+        <EmbeddedResource Include="Assets\played_icon.png" />
         <None Remove="Assets\secret_difficulty_icon.png" />
         <EmbeddedResource Include="Assets\secret_difficulty_icon.png" />
         <None Remove="Assets\two_saber_icon.png" />
@@ -83,10 +85,34 @@
         <EmbeddedResource Include="Assets\unselected_modifier.png" />
         <None Remove="Assets\selected_modifier.png" />
         <EmbeddedResource Include="Assets\selected_modifier.png" />
+        <None Remove="Assets\button_ss.png" />
+        <EmbeddedResource Include="Assets\button_ss.png" />
+        <None Remove="Assets\hover_button_ss.png" />
+        <EmbeddedResource Include="Assets\hover_button_ss.png" />
+        <None Remove="Assets\selected_button_ss.png" />
+        <EmbeddedResource Include="Assets\selected_button_ss.png" />
+        <None Remove="Assets\unselected_long_button_ss.png" />
+        <EmbeddedResource Include="Assets\unselected_long_button_ss.png" />
+        <None Remove="Assets\hover_long_button_ss.png" />
+        <EmbeddedResource Include="Assets\hover_long_button_ss.png" />
+        <None Remove="Assets\selected_long_button_ss.png" />
+        <EmbeddedResource Include="Assets\selected_long_button_ss.png" />
+        <None Remove="Assets\bg_duration_ss.png" />
+        <EmbeddedResource Include="Assets\bg_duration_ss.png" />
+        <None Remove="Assets\unselected_modifier_ss.png" />
+        <EmbeddedResource Include="Assets\unselected_modifier_ss.png" />
+        <None Remove="Assets\selected_modifier_ss.png" />
+        <EmbeddedResource Include="Assets\selected_modifier_ss.png" />
+        <None Remove="Assets\hover_modifier_ss.png" />
+        <EmbeddedResource Include="Assets\hover_modifier_ss.png" />
         <None Remove="Assets\find_maps_button.png" />
         <EmbeddedResource Include="Assets\find_maps_button.png" />
         <None Remove="Assets\find_maps_hover_button.png" />
         <EmbeddedResource Include="Assets\find_maps_hover_button.png" />
+        <None Remove="Assets\find_maps_button_ss.png" />
+        <EmbeddedResource Include="Assets\find_maps_button_ss.png" />
+        <None Remove="Assets\selected_find_maps_button_ss.png" />
+        <EmbeddedResource Include="Assets\selected_find_maps_button_ss.png" />
         <None Remove="Assets\hover_modifier.png" />
         <EmbeddedResource Include="Assets\hover_modifier.png" />
         <None Remove="Assets\button_bg_hover.png" />
@@ -95,6 +121,8 @@
         <EmbeddedResource Include="Assets\bot_speech_bubble.png" />
         <None Remove="Assets\botlocator_default.png" />
         <EmbeddedResource Include="Assets\botlocator_default.png" />
+        <None Remove="Assets\botlocator_ss.png" />
+        <EmbeddedResource Include="Assets\botlocator_ss.png" />
         <EmbeddedResource Include="Assets\Avatars\BotLocator.json"
                           LogicalName="BeatLocator.Assets.Avatars.BotLocator.json" />
         <None Remove="Assets\roulette_hit.wav" />
@@ -222,6 +250,10 @@
         <Reference Include="UnityEngine.UI">
             <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.UI.dll</HintPath>
             <Private>False</Private>
+        </Reference>
+        <Reference Include="UnityEngine.TextRenderingModule">
+            <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.TextRenderingModule.dll</HintPath>
+            <Private>false</Private>
         </Reference>
         <Reference Include="UnityEngine.UIElementsModule">
             <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.UIElementsModule.dll</HintPath>
