@@ -99,6 +99,9 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
     private readonly Image _botSpeechBackground = null!;
     [UIComponent("bot-speech-text")]
     private readonly TMP_Text _botSpeechText = null!;
+    [UIComponent("gameplay-settings-button")]
+    private Button _gameplaySettingsButton = null!;
+
     [UIComponent("find-button")]
     private readonly Button _findButton = null!;
     [UIComponent("find-artwork")]
@@ -397,15 +400,9 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
     {
         if (_searchInProgress)
         {
-<<<<<<< ours
             return;
         }
 
-=======
-            _flowCoordinator.CancelLoading();
-            return;
-        }
->>>>>>> theirs
         SetSearchInProgress(true);
         _flowCoordinator.FindScoreSaberMapAsync(
             (ScoreSaberPlayedFilter)_selectedPlayedFilter,
@@ -441,7 +438,6 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
         bool addedToHierarchy,
         bool screenSystemEnabling)
     {
-<<<<<<< ours
         base.DidActivate(
             firstActivation && !_visualsInitialized,
             addedToHierarchy,
@@ -459,11 +455,6 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
             ApplyBotSpeechVisibility(false);
         }
 
-=======
-        base.DidActivate(firstActivation, addedToHierarchy, screenSystemEnabling);
-        SyncDurationSelection();
-        _findButton.interactable = true;
->>>>>>> theirs
         ForceMenuLayoutRebuild();
         StartCoroutine(RebuildMenuLayoutNextFrame());
     }
@@ -509,7 +500,6 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
     internal void SetSearchInProgress(bool searchInProgress)
     {
         _searchInProgress = searchInProgress;
-<<<<<<< ours
         NotifyPropertyChanged(nameof(SearchInProgress));
         if (_findButton)
         {
@@ -521,30 +511,14 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
     [UIValue("searchInProgress")]
     public bool SearchInProgress => _searchInProgress;
 
-    [UIAction("cancel-loading")]
-    private void CancelLoadingPressed()
-=======
-        FindButtonText = searchInProgress
-            ? "<b>CANCEL SEARCH</b>"
-            : "<b>FIND SOME MAPS!</b>";
-        NotifyPropertyChanged(nameof(FindButtonText));
-        if (_findButton != null)
-        {
-            _findButton.interactable = true;
-        }
-    }
-
     [UIAction("gameplay-settings")]
     private void GameplaySettingsPressed()
     {
         _flowCoordinator.ToggleGameplaySettings();
     }
 
-    private ToggleButtonVisual CreateToggleVisual(
-        Button button,
-        TMP_Text label,
-        bool active)
->>>>>>> theirs
+    [UIAction("cancel-loading")]
+    private void CancelLoadingPressed()
     {
         _flowCoordinator.CancelLoading();
     }
@@ -954,7 +928,9 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
         ConfigureFixedRect(_botSpeechRow, new Vector2(112f, 12f),
             new Vector2(0f, -46.475f));
         ConfigureFixedRect((RectTransform)_findButton.transform,
-            new Vector2(112f, 11.5f), new Vector2(0f, -59.125f));
+            new Vector2(100f, 11.5f), new Vector2(6f, -59.125f));
+        ConfigureFixedRect((RectTransform)_gameplaySettingsButton.transform,
+            new Vector2(10f, 11.5f), new Vector2(-51f, -59.125f));
         ConfigureFixedRect((RectTransform)_exitButton.transform,
             new Vector2(6.7f, 6.7f), new Vector2(63.5f, -14.35f));
         ConfigureFixedRect(_exitArtwork.rectTransform,
@@ -1009,7 +985,7 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
         _botSpeechText.alignment = TextAlignmentOptions.MidlineLeft;
         _botSpeechText.margin = Vector4.zero;
         ConfigureFixedRect(_findArtwork.rectTransform,
-            new Vector2(112f, 11.5f), Vector2.zero);
+            new Vector2(100f, 11.5f), Vector2.zero);
     }
 
     private static void ConfigureRowContent(

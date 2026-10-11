@@ -1407,6 +1407,31 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
                 detailFadeDuration,
                 new Vector2(0f, 2f),
                 EaseType.OutCubic)
+            .AppendDelay(0.2f)
+            .OnCompleted(() => RevealSongActions(runId))
+            .Play();
+    }
+
+    private void RevealSongActions(int runId)
+    {
+        if (runId != _runId || _motion == null) return;
+        _menuButton.interactable = true;
+        _skipButton.interactable = true;
+        _gameplaySettingsButton.interactable = true;
+        _primaryButton.interactable = _primaryButtonState != PrimaryButtonState.Starting &&
+                                      _primaryButtonState != PrimaryButtonState.Downloading;
+        _motion.Sequence("open-reveal")
+            .At(0f, 0.2f, progress =>
+            {
+                if (runId == _runId) _soloButtonCanvasGroup.alpha = progress;
+            }, EaseType.Linear)
+            .OnCompleted(() =>
+            {
+                if (runId != _runId) return;
+                _soloButtonCanvasGroup.blocksRaycasts = true;
+                _soloButton.interactable = _primaryButtonState != PrimaryButtonState.Starting &&
+                                           _primaryButtonState != PrimaryButtonState.Downloading;
+            })
             .Play();
     }
 
@@ -1617,8 +1642,6 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
                    $"  •  {selectedDifficulty.Difficulty.Njs:0.#} NJS";
         }
 
-        var stars = selectedDifficulty.Difficulty.Stars.HasValue
-            ? selectedDifficulty.Difficulty.Stars.Value.ToString("0.00")
         var evaluatedStars = selectedDifficulty.Difficulty.EvaluationStars ?? selectedDifficulty.Difficulty.Stars;
         var stars = evaluatedStars.HasValue
             ? evaluatedStars.Value.ToString("0.00")
@@ -1713,6 +1736,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         _motion?.Kill("winner-reveal");
         _motion?.Kill("song-info-transition");
         _motion?.Kill("song-details");
+        _motion?.Kill("open-reveal");
         if (_rouletteAudioSource != null)
         {
             _rouletteAudioSource.Stop();

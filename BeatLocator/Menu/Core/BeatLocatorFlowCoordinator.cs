@@ -22,7 +22,6 @@ internal enum MapDownloadOutcome
     AlreadyInstalled,
     Canceled,
     TimedOut,
-    Canceled,
     Failed
 }
 
@@ -84,9 +83,6 @@ internal sealed partial class BeatLocatorFlowCoordinator : FlowCoordinator
     private bool _mapSearchInProgress;
     private CancellationTokenSource? _mapSearchCancellationSource;
     private bool _mapDownloadInProgress;
-    private CancellationTokenSource? _mapDownloadCancellationSource;
-    private int _loadingGeneration;
-    private long _loadingPpRunId;
     private object? _fadeInOutController;
     private bool _launchFadeActive;
     private bool _launchPromptDetectionActive;
@@ -660,7 +656,6 @@ internal sealed partial class BeatLocatorFlowCoordinator : FlowCoordinator
 
     private async void RetryPostLevelMapAsync(EvaluatedDifficulty selection, int generation)
     {
-        var generation = _loadingGeneration;
         if (await PlayMapAsync(selection)) return;
         if (generation != _operationGeneration) return;
 
@@ -719,9 +714,9 @@ internal sealed partial class BeatLocatorFlowCoordinator : FlowCoordinator
 
     private IEnumerator ShowRouletteAfterPreparation(ViewController roulette)
     {
-        var generation = _loadingGeneration;
+        var generation = _operationGeneration;
         yield return null;
-        if (!isActiveAndEnabled || generation != _loadingGeneration) yield break;
+        if (!isActiveAndEnabled || generation != _operationGeneration) yield break;
 
         ReplaceTopViewController(
             roulette,
@@ -955,7 +950,9 @@ internal sealed partial class BeatLocatorFlowCoordinator : FlowCoordinator
         _mapSearchCancellationSource = null;
         source.Cancel();
         _mapSearchInProgress = false;
-        if (_rankingProvider == RankingProvider.ScoreSaber)
+        if (_rankingProvider == RankingProvider.BeatSaver)
+            _beatSaverSelect.Value.SetSearchInProgress(false);
+        else if (_rankingProvider == RankingProvider.ScoreSaber)
             _scoreSaberSelect.Value.SetSearchInProgress(false);
         else
             _beatLeaderSelect.Value.SetSearchInProgress(false);
@@ -978,6 +975,7 @@ internal sealed partial class BeatLocatorFlowCoordinator : FlowCoordinator
         PostLevelUiState.Instance?.CancelPending();
         _pendingPostLevelResult = null;
         _postLevelFlowReady = false;
+        _postLevelPresentationInProgress = false;
         _postLevelCanceled = true;
         _nextSearchFromPostLevel = false;
     }
@@ -1183,7 +1181,7 @@ internal sealed partial class BeatLocatorFlowCoordinator : FlowCoordinator
         }
         catch (Exception exception)
         {
-            if (generation != _loadingGeneration) return false;
+            if (generation != _operationGeneration) return false;
             FadeBackInAfterLaunchFailure();
             Plugin.Log.Error($"Could not start the selected Beat Saber level: {exception}");
             return false;

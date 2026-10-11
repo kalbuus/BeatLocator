@@ -203,6 +203,9 @@ public sealed class BeatSaverSelect : BSMLAutomaticViewController
     }
 
     [UIAction("exitPressed")] private void ExitPressed() => _flow.ShowSelect();
+    [UIAction("gameplay-settings")]
+    private void GameplaySettingsPressed() => _flow.ToggleGameplaySettings();
+
     [UIAction("cancelLoading")] private void CancelLoading() => _flow.CancelLoading();
 
     protected override void DidActivate(bool firstActivation, bool addedToHierarchy, bool screenSystemEnabling)
