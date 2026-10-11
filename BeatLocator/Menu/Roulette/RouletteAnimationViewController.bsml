@@ -40,4 +40,7 @@
             </horizontal>
         </vertical>
     </horizontal>
+    <button text="CANCEL" on-click="cancel-loading" active="~loadingInProgress"
+            ignore-layout="true" anchor-pos-y="-31"
+            preferred-width="38" preferred-height="8" />
 </vertical>

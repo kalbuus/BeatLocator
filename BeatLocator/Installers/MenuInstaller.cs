@@ -44,6 +44,10 @@ internal class MenuInstaller : Installer
             .FromNewComponentAsViewController()
             .AsSingle();
 
+        Container.Bind<BeatSaverSelect>()
+            .FromNewComponentAsViewController()
+            .AsSingle();
+
         Container.Bind<RouletteAnimationViewController>()
             .FromNewComponentAsViewController()
             .AsSingle();

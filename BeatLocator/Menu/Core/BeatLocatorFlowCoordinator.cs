@@ -3,6 +3,7 @@ using BeatLocator.Dialogue;
 using BeatLocator.Integrations;
 using BeatLocator.PostLevel;
 using BeatLocator.Settings;
+using BeatLocator.WebUtils;
 using HMUI;
 using System;
 using System.Collections;
@@ -20,6 +21,7 @@ internal enum MapDownloadOutcome
     Installed,
     AlreadyInstalled,
     TimedOut,
+    Canceled,
     Failed
 }
 
@@ -61,6 +63,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     private LazyInject<SelectViewController> _selectViewController = null!;
     private LazyInject<BeatLeaderSelect> _beatLeaderSelect = null!;
     private LazyInject<ScoreSaberSelect> _scoreSaberSelect = null!;
+    private LazyInject<BeatSaverSelect> _beatSaverSelect = null!;
     private ViewController? _activeRankingSelect;
     private LazyInject<RouletteAnimationViewController> _rouletteAnimationViewController = null!;
     private LazyInject<PpResultViewController> _ppResultViewController = null!;
@@ -72,8 +75,12 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     private bool _mapSearchInProgress;
     private CancellationTokenSource? _mapSearchCancellationSource;
     private bool _mapDownloadInProgress;
+    private CancellationTokenSource? _mapDownloadCancellationSource;
+    private int _loadingGeneration;
+    private long _loadingPpRunId;
     private object? _fadeInOutController;
     private bool _launchFadeActive;
+    private bool _launchPromptDetectionActive;
     private bool _postLevelFadeActive;
     private RankingProvider _rankingProvider = RankingProvider.BeatLeader;
     private PluginConfig _config = null!;
@@ -101,6 +108,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         LazyInject<SelectViewController> selectViewController,
         LazyInject<BeatLeaderSelect> beatLeaderSelect,
         LazyInject<ScoreSaberSelect> scoreSaberSelect,
+        LazyInject<BeatSaverSelect> beatSaverSelect,
         LazyInject<RouletteAnimationViewController> rouletteAnimationViewController,
         LazyInject<PpResultViewController> ppResultViewController,
         LazyInject<PostLevelLoadingViewController> postLevelLoadingViewController,
@@ -117,6 +125,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         _selectViewController = selectViewController;
         _beatLeaderSelect = beatLeaderSelect;
         _scoreSaberSelect = scoreSaberSelect;
+        _beatSaverSelect = beatSaverSelect;
         _rouletteAnimationViewController = rouletteAnimationViewController;
         _ppResultViewController = ppResultViewController;
         _postLevelLoadingViewController = postLevelLoadingViewController;
@@ -183,6 +192,17 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         OpenProviderSelect(viewController, preparedNow);
     }
 
+    internal void ShowBeatSaverSelect()
+    {
+        if (_providerTransitionPending) return;
+        StopProviderPrewarm();
+        _rankingProvider = RankingProvider.BeatSaver;
+        var viewController = _beatSaverSelect.Value;
+        var preparedNow = viewController.PrepareForFirstPresentation();
+        _activeRankingSelect = viewController;
+        OpenProviderSelect(viewController, preparedNow);
+    }
+
     private void OpenProviderSelect(ViewController viewController, bool preparedNow)
     {
         if (preparedNow)
@@ -227,9 +247,12 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     {
         _postLevelFlowReady = false;
         _postLevelRetrySelection = null;
-        var viewController = _rankingProvider == RankingProvider.ScoreSaber
-            ? (ViewController)_scoreSaberSelect.Value
-            : _beatLeaderSelect.Value;
+        var viewController = _rankingProvider switch
+        {
+            RankingProvider.BeatSaver => (ViewController)_beatSaverSelect.Value,
+            RankingProvider.ScoreSaber => _scoreSaberSelect.Value,
+            _ => _beatLeaderSelect.Value
+        };
         _activeRankingSelect = viewController;
         ReplaceTopViewController(
             viewController,
@@ -259,8 +282,10 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         }
 
         _rankingProvider = provider;
+        _loadingPpRunId = runId;
         var loadingViewController = _postLevelLoadingViewController.Value;
-        loadingViewController.SetMessage("CALCULATING PP");
+        loadingViewController.SetMessage(provider == RankingProvider.BeatSaver
+            ? "LEVEL COMPLETED" : "CALCULATING PP");
         _postLevelPresentationInProgress = true;
         Plugin.Log.Info($"[PP UI] Opening loading screen for run {runId}.");
         return await PresentPostLevelLoadingAfterVanillaContinueAsync();
@@ -599,19 +624,24 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     internal void StartNextRoulette()
     {
+        var generation = _loadingGeneration;
         _postLevelFlowReady = false;
         _nextSearchFromPostLevel = true;
         var loadingViewController = _postLevelLoadingViewController.Value;
         loadingViewController.SetMessage("FINDING NEXT SONG");
         ReplaceTopViewController(
             loadingViewController,
-            RepeatLastSearch,
+            () =>
+            {
+                if (generation == _loadingGeneration) RepeatLastSearch();
+            },
             ViewController.AnimationType.In,
             ViewController.AnimationDirection.Horizontal);
     }
 
     internal void RetryPostLevelMap()
     {
+        var generation = _loadingGeneration;
         var selection = _postLevelRetrySelection;
         if (selection == null)
         {
@@ -624,14 +654,19 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         loadingViewController.SetMessage("LOADING LEVEL");
         ReplaceTopViewController(
             loadingViewController,
-            () => RetryPostLevelMapAsync(selection),
+            () =>
+            {
+                if (generation == _loadingGeneration) RetryPostLevelMapAsync(selection);
+            },
             ViewController.AnimationType.In,
             ViewController.AnimationDirection.Horizontal);
     }
 
     private async void RetryPostLevelMapAsync(EvaluatedDifficulty selection)
     {
+        var generation = _loadingGeneration;
         if (await PlayMapAsync(selection)) return;
+        if (generation != _loadingGeneration) return;
 
         ShowRankingSelect();
         ShowPopup("RETRY FAILED", "Beat Saber could not reopen the previous roulette map.");
@@ -639,6 +674,11 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     private void RepeatLastSearch()
     {
+        if (_rankingProvider == RankingProvider.BeatSaver)
+        {
+            _beatSaverSelect.Value.RepeatLastSearch();
+            return;
+        }
         if (_rankingProvider == RankingProvider.ScoreSaber)
         {
             _scoreSaberSelect.Value.RepeatLastSearch();
@@ -679,8 +719,9 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     private IEnumerator ShowRouletteAfterPreparation(ViewController roulette)
     {
+        var generation = _loadingGeneration;
         yield return null;
-        if (!isActiveAndEnabled) yield break;
+        if (!isActiveAndEnabled || generation != _loadingGeneration) yield break;
 
         ReplaceTopViewController(
             roulette,
@@ -773,6 +814,12 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 cancellationToken));
     }
 
+    internal void FindBeatSaverMapAsync(BeatSaverSearchRequest request)
+    {
+        RunMapSearchAsync(RankingProvider.BeatSaver, request.SecretDifficulty,
+            token => BeatSaverWebUtil.FindMapAsync(request, token));
+    }
+
     private async void RunMapSearchAsync(
         RankingProvider provider,
         bool secretDifficulty,
@@ -803,6 +850,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 timeoutSource.Token);
 
             var searchResult = await searchAsync(linkedSource.Token);
+            linkedSource.Token.ThrowIfCancellationRequested();
 
             if (!searchResult.IsSuccess || searchResult.SelectedDifficulty == null)
             {
@@ -846,7 +894,11 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
             {
                 _mapSearchCancellationSource = null;
                 _mapSearchInProgress = false;
-                if (provider == RankingProvider.ScoreSaber)
+                if (provider == RankingProvider.BeatSaver)
+                {
+                    _beatSaverSelect.Value.SetSearchInProgress(false);
+                }
+                else if (provider == RankingProvider.ScoreSaber)
                 {
                     _scoreSaberSelect.Value.SetSearchInProgress(false);
                     if (!startedFromPostLevel && botDialogueEvent != null)
@@ -894,7 +946,41 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     private void CancelMapSearch()
     {
-        _mapSearchCancellationSource?.Cancel();
+        var source = _mapSearchCancellationSource;
+        _mapSearchCancellationSource = null;
+        _mapSearchInProgress = false;
+        source?.Cancel();
+        _beatLeaderSelect.Value.SetSearchInProgress(false);
+        _scoreSaberSelect.Value.SetSearchInProgress(false);
+        _beatSaverSelect.Value.SetSearchInProgress(false);
+    }
+
+    internal void CancelLoading()
+    {
+        // Invalidate UI continuations before signaling cooperative cancellation.
+        _loadingGeneration++;
+        CancelMapSearch();
+        var downloadSource = _mapDownloadCancellationSource;
+        _mapDownloadCancellationSource = null;
+        _mapDownloadInProgress = false;
+        downloadSource?.Cancel();
+        if (_loadingPpRunId != 0)
+        {
+            PostLevelUiState.Instance?.Abandon(_loadingPpRunId);
+            _loadingPpRunId = 0;
+        }
+        _playSessionManager.CancelCurrent();
+        _pendingPostLevelResult = null;
+        _postLevelFlowReady = false;
+        _postLevelPresentationInProgress = false;
+        _nextSearchFromPostLevel = false;
+        _launchPromptDetectionActive = false;
+        FadeBackInAfterLaunchFailure();
+        Plugin.Log.Info("[Flow] Loading canceled; returning to search settings.");
+        if (_activeRankingSelect == null || topViewController != _activeRankingSelect)
+        {
+            ShowRankingSelect();
+        }
     }
 
     internal void ShowPopup(
@@ -954,17 +1040,25 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         }
 
         _mapDownloadInProgress = true;
+        using var cancellationSource =
+            new CancellationTokenSource(MapDownloadTimeoutMilliseconds);
+        _mapDownloadCancellationSource = cancellationSource;
         try
         {
-            using var cancellationSource =
-                new CancellationTokenSource(MapDownloadTimeoutMilliseconds);
             var downloaded = await BetterSongSearchDownloadManager.DownloadMapAsync(
                 selectedDifficulty.Map,
                 cancellationSource.Token);
+            cancellationSource.Token.ThrowIfCancellationRequested();
 
             return downloaded
                 ? MapDownloadOutcome.Installed
                 : MapDownloadOutcome.AlreadyInstalled;
+        }
+        catch (OperationCanceledException) when (
+            !ReferenceEquals(_mapDownloadCancellationSource, cancellationSource))
+        {
+            Plugin.Log.Info("[Flow] Map download canceled by the player.");
+            return MapDownloadOutcome.Canceled;
         }
         catch (OperationCanceledException)
         {
@@ -978,7 +1072,11 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         }
         finally
         {
-            _mapDownloadInProgress = false;
+            if (ReferenceEquals(_mapDownloadCancellationSource, cancellationSource))
+            {
+                _mapDownloadCancellationSource = null;
+                _mapDownloadInProgress = false;
+            }
         }
     }
 
@@ -998,9 +1096,11 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     internal async Task<bool> PlayMapAsync(EvaluatedDifficulty selectedDifficulty)
     {
+        var generation = _loadingGeneration;
         try
         {
             var resolvedLevel = await BeatSaberLevelLauncher.ResolveAsync(selectedDifficulty);
+            if (generation != _loadingGeneration) return false;
             var key = resolvedLevel.Key;
             var state = new LevelSelectionFlowCoordinator.State(
                 SelectLevelCategoryViewController.LevelCategory.All,
@@ -1009,10 +1109,13 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 resolvedLevel.Level);
 
             await FadeOutBeforeSoloFlowAsync(resolvedLevel);
+            if (generation != _loadingGeneration) return false;
             _soloFreePlayFlowCoordinator.Setup(state);
             var switched = await StopRouletteAndPresentSoloFlowAsync(
                 resolvedLevel,
-                selectedDifficulty);
+                selectedDifficulty,
+                generation);
+            if (generation != _loadingGeneration) return false;
             if (!switched)
             {
                 FadeBackInAfterLaunchFailure();
@@ -1021,6 +1124,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         }
         catch (Exception exception)
         {
+            if (generation != _loadingGeneration) return false;
             FadeBackInAfterLaunchFailure();
             Plugin.Log.Error($"Could not start the selected Beat Saber level: {exception}");
             return false;
@@ -1029,7 +1133,8 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     private Task<bool> StopRouletteAndPresentSoloFlowAsync(
         BeatSaberLevelLauncher.ResolvedLevel resolvedLevel,
-        EvaluatedDifficulty selectedDifficulty)
+        EvaluatedDifficulty selectedDifficulty,
+        int generation)
     {
         _postLevelFlowReady = false;
         _postLevelPresentationInProgress = false;
@@ -1038,7 +1143,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         return SwitchMainChildFlowAsync(
             this,
             _soloFreePlayFlowCoordinator,
-            () => SelectDifficultyAndPressPlayAsync(resolvedLevel, selectedDifficulty),
+            () => SelectDifficultyAndPressPlayAsync(resolvedLevel, selectedDifficulty, generation),
             "roulette launch");
     }
 
@@ -1226,24 +1331,29 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     private async void SelectDifficultyAndPressPlayAsync(
         BeatSaberLevelLauncher.ResolvedLevel resolvedLevel,
-        EvaluatedDifficulty selectedDifficulty)
+        EvaluatedDifficulty selectedDifficulty,
+        int generation)
     {
         var sessionArmed = false;
         try
         {
+            if (generation != _loadingGeneration) return;
             await BeatSaberLevelLauncher.SelectDifficultyAsync(
                 _soloFreePlayFlowCoordinator,
                 resolvedLevel);
+            if (generation != _loadingGeneration) return;
             _playSessionManager.Begin(
                 _rankingProvider,
                 selectedDifficulty,
                 resolvedLevel.Key);
             sessionArmed = true;
+            _launchPromptDetectionActive = true;
             PressSoloPlayButton();
-            _launchFadeActive = false;
         }
         catch (Exception exception)
         {
+            if (generation != _loadingGeneration) return;
+            _launchPromptDetectionActive = false;
             if (sessionArmed)
             {
                 _playSessionManager.CancelCurrent();
@@ -1267,9 +1377,39 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         playMethod.Invoke(_soloFreePlayFlowCoordinator, null);
     }
 
+    internal static void RevealLaunchPrompt(
+        SinglePlayerLevelSelectionFlowCoordinator flowCoordinator,
+        ViewController newViewController)
+    {
+        var instance = _activeInstance;
+        if (instance == null || !instance._launchPromptDetectionActive ||
+            !ReferenceEquals(flowCoordinator, instance._soloFreePlayFlowCoordinator))
+        {
+            return;
+        }
+
+        // Heck and other pre-play screens can defer gameplay until the player
+        // answers. Reveal their UI without answering or restarting the level.
+        instance._launchPromptDetectionActive = false;
+        Plugin.Log.Info(
+            $"[Flow] Revealing roulette launch prompt: {newViewController.GetType().Name}.");
+        instance.FadeBackInAfterLaunchFailure();
+    }
+
+    internal static void ReleaseLaunchFadeForGameplay()
+    {
+        var instance = _activeInstance;
+        if (instance == null || !instance._launchPromptDetectionActive) return;
+
+        // The actual scene launch owns the fade from this point onward.
+        instance._launchPromptDetectionActive = false;
+        instance._launchFadeActive = false;
+    }
+
     private Task FadeOutBeforeSoloFlowAsync(
         BeatSaberLevelLauncher.ResolvedLevel resolvedLevel)
     {
+        _launchPromptDetectionActive = false;
         if (_fadeInOutController == null || RequiresMovementPrompt(resolvedLevel.Key))
         {
             return Task.CompletedTask;
@@ -1318,7 +1458,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         }
         catch (Exception exception)
         {
-            Plugin.Log.Error($"Could not restore the menu fade after launch failure: {exception}");
+            Plugin.Log.Error($"Could not restore menu visibility during roulette launch: {exception}");
         }
     }
 
@@ -1366,6 +1506,8 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         _beatLeaderSelect.Value.PrepareForFirstPresentation();
         yield return null;
         _scoreSaberSelect.Value.PrepareForFirstPresentation();
+        yield return null;
+        _beatSaverSelect.Value.PrepareForFirstPresentation();
         _providerPrewarmCoroutine = null;
     }
 
@@ -1435,10 +1577,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
         if (topViewController is RouletteAnimationViewController)
         {
-            if (!_mapDownloadInProgress)
-            {
-                ShowRankingSelect();
-            }
+            CancelLoading();
             return;
         }
 
@@ -1450,10 +1589,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
         if (topViewController is PostLevelLoadingViewController)
         {
-            if (!_mapSearchInProgress)
-            {
-                ShowRankingSelect();
-            }
+            CancelLoading();
             return;
         }
 

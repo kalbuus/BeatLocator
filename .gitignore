@@ -3,6 +3,7 @@
 [Oo]bj/
 /artifacts/
 /TestResults/
+/tests/
 /BenchmarkDotNet.Artifacts/
 *.log
 *.tmp

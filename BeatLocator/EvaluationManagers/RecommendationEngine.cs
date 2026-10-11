@@ -536,13 +536,30 @@ internal static class RecommendationEngine
         return evaluatedDifficulties;
     }
 
+    internal static MapSearchResult SelectFromCandidates(IEnumerable<EvaluatedDifficulty> candidates)
+    {
+        var available = candidates.Where(candidate => !IsInSessionHistory(candidate.Map)).ToList();
+        var selected = SelectRandomDifficulty(available);
+        if (selected == null)
+        {
+            return MapSearchResult.Failure(
+                "No BeatSaver difficulty matched your NPS, NJS, style, duration, and quality settings. " +
+                "Try a wider range or different filters.");
+        }
+        AddToSessionHistory(selected.Map);
+        Plugin.Log.Info($"Selected BeatSaver map {selected.Map.Id}: " +
+                        $"{selected.Difficulty.ModeName}/{selected.Difficulty.DifficultyName}, " +
+                        $"NPS={selected.Difficulty.Nps:0.00}, NJS={selected.Difficulty.Njs:0.0}.");
+        return MapSearchResult.Success(selected);
+    }
+
     private static List<RecommendationMap> ExcludeSessionHistory(
         IEnumerable<RecommendationMap> maps)
     {
         return maps.Where(map => !IsInSessionHistory(map)).ToList();
     }
 
-    private static bool IsInSessionHistory(RecommendationMap map)
+    internal static bool IsInSessionHistory(RecommendationMap map)
     {
         return GetSessionHistoryKeys(map).Any(key => SessionSongHistoryKeys.Contains(key));
     }

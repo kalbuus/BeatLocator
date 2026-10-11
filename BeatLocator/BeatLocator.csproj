@@ -37,6 +37,8 @@
                           LogicalName="BeatLocator.Menu.BeatLeaderSelect.bsml" />
         <EmbeddedResource Include="Menu\Selection\ScoreSaberSelect.bsml"
                           LogicalName="BeatLocator.Menu.ScoreSaberSelect.bsml" />
+        <EmbeddedResource Include="Menu\Selection\BeatSaverSelect.bsml"
+                          LogicalName="BeatLocator.Menu.BeatSaverSelect.bsml" />
         <EmbeddedResource Include="Menu\Roulette\RouletteAnimationViewController.bsml"
                           LogicalName="BeatLocator.Menu.RouletteAnimationViewController.bsml" />
         <EmbeddedResource Include="Menu\PostLevel\PpResultViewController.bsml"

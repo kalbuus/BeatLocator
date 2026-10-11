@@ -84,6 +84,25 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     [UIValue("primaryButtonText")]
     public string PrimaryButtonText { get; private set; } = "PLAY";
 
+    [UIValue("loadingInProgress")]
+    public bool LoadingInProgress { get; private set; }
+
+    private void SetLoadingInProgress(bool value)
+    {
+        LoadingInProgress = value;
+        NotifyPropertyChanged(nameof(LoadingInProgress));
+    }
+
+    [UIAction("cancel-loading")]
+    private void CancelLoadingPressed()
+    {
+        // Invalidate this view's download/launch continuations immediately,
+        // including the frames before the return animation deactivates it.
+        _runId++;
+        SetLoadingInProgress(false);
+        _flowCoordinator.CancelLoading();
+    }
+
     private readonly List<ImageView> _dummyCovers = new List<ImageView>();
     private BeatLocatorFlowCoordinator _flowCoordinator = null!;
     private SongPreviewPlayer _songPreviewPlayer = null!;
@@ -156,6 +175,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         bool secretDifficulty)
     {
         _runId++;
+        SetLoadingInProgress(false);
         ReleaseSelectedMedia();
 
         _selectedDifficulty = selectedDifficulty;
@@ -285,6 +305,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         {
             var playRunId = _runId;
             _primaryButtonState = PrimaryButtonState.Starting;
+            SetLoadingInProgress(true);
             SetPrimaryButtonText("PLAY");
             _primaryButton.interactable = false;
             _menuButton.interactable = false;
@@ -294,6 +315,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
             var started = await _flowCoordinator.PlayMapAsync(_selectedDifficulty);
             if (!started && playRunId == _runId)
             {
+                SetLoadingInProgress(false);
                 _primaryButtonState = PrimaryButtonState.Play;
                 SetPrimaryButtonText("PLAY");
                 _primaryButton.interactable = true;
@@ -312,6 +334,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
 
         var runId = _runId;
         _primaryButtonState = PrimaryButtonState.Downloading;
+        SetLoadingInProgress(true);
         SetPrimaryButtonText("PLAY");
         _primaryButton.interactable = false;
         _menuButton.interactable = false;
@@ -329,6 +352,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
             var started = await _flowCoordinator.PlayMapAsync(_selectedDifficulty);
             if (!started && runId == _runId)
             {
+                SetLoadingInProgress(false);
                 _primaryButtonState = PrimaryButtonState.Play;
                 _primaryButton.interactable = true;
                 _menuButton.interactable = true;
@@ -338,6 +362,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         }
 
         _primaryButtonState = PrimaryButtonState.Download;
+        SetLoadingInProgress(false);
         SetPrimaryButtonText("PLAY");
         _primaryButton.interactable = true;
         _menuButton.interactable = true;
@@ -757,6 +782,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
 
     private void StartDemo()
     {
+        SetLoadingInProgress(true);
         StopAnimations();
         StopPreviewPlayback();
 
@@ -1311,6 +1337,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         _skipButton.interactable = true;
         _primaryButton.interactable = true;
         Canvas.ForceUpdateCanvases();
+        SetLoadingInProgress(false);
         EnforceSongDetailsBounds();
         LayoutRebuilder.ForceRebuildLayoutImmediate(_songDetails);
         LayoutSongTitleRow();
@@ -1530,6 +1557,12 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
             !mode.Equals("Standard", StringComparison.OrdinalIgnoreCase))
         {
             difficultyLabel += $" ({mode})";
+        }
+
+        if (selectedDifficulty.Difficulty.Nps.HasValue)
+        {
+            return $"{difficultyLabel}  •  {selectedDifficulty.Difficulty.Nps:0.00} NPS" +
+                   $"  •  {selectedDifficulty.Difficulty.Njs:0.#} NJS";
         }
 
         var stars = selectedDifficulty.Difficulty.Stars.HasValue

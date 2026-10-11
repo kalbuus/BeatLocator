@@ -497,11 +497,21 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
     internal void SetSearchInProgress(bool searchInProgress)
     {
         _searchInProgress = searchInProgress;
+        NotifyPropertyChanged(nameof(SearchInProgress));
         if (_findButton)
         {
             _findButton.interactable = !searchInProgress;
             _findHoverVisual?.SetHoverEnabled(!searchInProgress);
         }
+    }
+
+    [UIValue("searchInProgress")]
+    public bool SearchInProgress => _searchInProgress;
+
+    [UIAction("cancel-loading")]
+    private void CancelLoadingPressed()
+    {
+        _flowCoordinator.CancelLoading();
     }
 
     internal void ShowSearchFailureDialogue(string eventId)

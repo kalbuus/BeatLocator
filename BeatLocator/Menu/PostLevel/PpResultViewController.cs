@@ -247,6 +247,7 @@ internal sealed class PpResultViewController : BSMLAutomaticViewController
 
     private static string GetStatusText(PpResolutionOutcome outcome)
     {
+        if (outcome == PpResolutionOutcome.LocalCompleted) return "LEVEL COMPLETED";
         return outcome == PpResolutionOutcome.NonPersonalBest
             ? "PERSONAL BEST STANDS"
             : "PP UNAVAILABLE";
@@ -254,7 +255,8 @@ internal sealed class PpResultViewController : BSMLAutomaticViewController
 
     private static string GetStatusDetail(PostLevelDisplayResult result)
     {
-        if (result.Outcome == PpResolutionOutcome.NonPersonalBest)
+        if (result.Outcome == PpResolutionOutcome.NonPersonalBest ||
+            result.Outcome == PpResolutionOutcome.LocalCompleted)
         {
             return $"{result.LocalScore.ToString("N0", CultureInfo.InvariantCulture)}  •  " +
                    $"{result.LocalRank}  •  {result.LocalMaxCombo} COMBO";

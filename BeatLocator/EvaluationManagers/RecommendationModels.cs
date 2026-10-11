@@ -68,6 +68,12 @@ internal sealed class RecommendationMap
 
 internal sealed class RecommendationDifficulty
 {
+    [JsonIgnore]
+    public float? Nps { get; set; }
+
+    [JsonIgnore]
+    public float? Njs { get; set; }
+
     [JsonProperty("difficultyName")]
     public string? DifficultyName { get; set; }
 

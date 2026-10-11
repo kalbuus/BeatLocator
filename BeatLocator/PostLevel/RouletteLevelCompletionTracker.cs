@@ -114,6 +114,17 @@ internal sealed class RouletteLevelCompletionTracker : IInitializable, IDisposab
 
         _botDialogueSessionState.RecordCleared();
 
+        if (session.Provider == RankingProvider.BeatSaver)
+        {
+            _uiState.Complete(session, new ProviderPpResult
+            {
+                Outcome = PpResolutionOutcome.LocalCompleted,
+                Detail = "BeatSaver roulette completed."
+            }, results);
+            _sessionManager.Release(session.RunId);
+            return;
+        }
+
         if (results.invalidated)
         {
             LogProviderResult(

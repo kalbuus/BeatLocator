@@ -12,7 +12,8 @@ internal enum PpResolutionOutcome
     UploadFailed,
     TimedOut,
     Invalidated,
-    Unranked
+    Unranked,
+    LocalCompleted
 }
 
 internal sealed class ProviderPpBaseline

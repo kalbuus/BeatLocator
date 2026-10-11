@@ -192,6 +192,12 @@ public class SelectViewController : BSMLAutomaticViewController
         backgroundTransition.Initialize(button, customBackground);
     }
 
+    [UIAction("bsPressed")]
+    private void OnBeatSaverPressed()
+    {
+        _flowCoordinator.ShowBeatSaverSelect();
+    }
+
     [UIAction("blPressed")]
     private void OnBeatLeaderPressed()
     {

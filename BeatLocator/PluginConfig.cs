@@ -36,6 +36,14 @@ internal class PluginConfig
 
     public virtual int ScoreSaberPlayedSelection { get; set; } = 0;
 
+    public virtual int BeatSaverNpsSelection { get; set; } = 3;
+    public virtual int BeatSaverNjsSelection { get; set; } = 0;
+    public virtual int BeatSaverStyleSelection { get; set; } = 0;
+    public virtual int BeatSaverDurationSelection { get; set; } = 0;
+    public virtual int BeatSaverQualitySelection { get; set; } = 1;
+    public virtual bool BeatSaverStandardOnly { get; set; } = true;
+    public virtual bool BeatSaverSecretDifficulty { get; set; } = false;
+
     /*
     /// <summary>
     /// This is called whenever BSIPA reads the config from disk (including when file changes are detected).

@@ -22,6 +22,8 @@ internal sealed class PostLevelPpResolver
         EvaluatedDifficulty selection,
         CancellationToken cancellationToken)
     {
+        if (provider == RankingProvider.BeatSaver)
+            return Task.FromResult<ProviderPpBaseline?>(null);
         return provider == RankingProvider.ScoreSaber
             ? SSWebUtil.CapturePpBaselineAsync(
                 _platformUserModel,
@@ -34,6 +36,8 @@ internal sealed class PostLevelPpResolver
         RoulettePlaySession session,
         LevelCompletionResults results)
     {
+        if (session.Provider == RankingProvider.BeatSaver)
+            return new ProviderPpResult { Outcome = PpResolutionOutcome.LocalCompleted };
         try
         {
             var baseline = await session.BaselineTask.ConfigureAwait(false);

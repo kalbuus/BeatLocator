@@ -161,4 +161,7 @@
         <image id="find-artwork" ignore-layout="true"
                preserve-aspect="false" />
     </button>
+    <button text="CANCEL" on-click="cancel-loading" active="~searchInProgress"
+            ignore-layout="true" anchor-pos-y="-73"
+            preferred-width="38" preferred-height="8" />
 </vertical>

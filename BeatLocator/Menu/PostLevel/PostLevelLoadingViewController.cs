@@ -2,6 +2,7 @@ using BeatSaberMarkupLanguage.Attributes;
 using BeatSaberMarkupLanguage.ViewControllers;
 using MotionUtils;
 using UnityEngine;
+using Zenject;
 
 namespace BeatLocator.Menu;
 
@@ -18,6 +19,19 @@ internal sealed class PostLevelLoadingViewController : BSMLAutomaticViewControll
 
     private int _animationId;
     private MotionScope? _motion;
+    private BeatLocatorFlowCoordinator _flowCoordinator = null!;
+
+    [Inject]
+    private void Construct(BeatLocatorFlowCoordinator flowCoordinator)
+    {
+        _flowCoordinator = flowCoordinator;
+    }
+
+    [UIAction("cancel")]
+    private void CancelPressed()
+    {
+        _flowCoordinator.CancelLoading();
+    }
 
     internal void SetMessage(string message)
     {

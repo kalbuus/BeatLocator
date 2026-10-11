@@ -37,10 +37,10 @@
                 child-expand-width="false"
                 child-align="LowerCenter"
                 spacing="4">
-        <button id="beatsaver-button" on-click="bsPressed" interactable="false"
+        <button id="beatsaver-button" on-click="bsPressed"
                        stroke-visible="false"
                        text=""
-                       hover-hint="Coming soon"
+                       hover-hint="Find maps by NPS, NJS, style and quality. No ranking profile needed."
                        preferred-width="25" 
                        preferred-height="35" 
                        pad="2">

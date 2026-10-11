@@ -3,15 +3,19 @@ namespace BeatLocator.EvaluationManagers;
 internal enum RankingProvider
 {
     BeatLeader,
-    ScoreSaber
+    ScoreSaber,
+    BeatSaver
 }
 
 internal static class RankingProviderExtensions
 {
     internal static string GetDisplayName(this RankingProvider provider)
     {
-        return provider == RankingProvider.ScoreSaber
-            ? "ScoreSaber"
-            : "BeatLeader";
+        return provider switch
+        {
+            RankingProvider.ScoreSaber => "ScoreSaber",
+            RankingProvider.BeatSaver => "BeatSaver",
+            _ => "BeatLeader"
+        };
     }
 }

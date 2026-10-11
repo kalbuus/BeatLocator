@@ -1,0 +1,79 @@
+<vertical id="beatsaver-root" preferred-width="112" preferred-height="100"
+          child-control-width="false" child-control-height="false"
+          child-expand-width="false" child-expand-height="false"
+          child-align="UpperCenter" spacing="1.5">
+    <horizontal preferred-width="112" preferred-height="10" child-control-width="false"
+                child-control-height="false" child-expand-width="false" child-expand-height="false"
+                child-align="MiddleCenter" spacing="6">
+        <text text="BeatSaver" font-size="4" preferred-width="23" preferred-height="7" />
+        <image src="BeatLocator.Assets.logo.png" preferred-width="45.2" preferred-height="5" preserve-aspect="true" />
+        <button text="BACK" on-click="exitPressed" preferred-width="24" preferred-height="7" />
+    </horizontal>
+    <text text="Choose your intensity. Ranked and unranked maps. No profile needed."
+          font-size="2.4" color="#9E9E9E" preferred-width="110" preferred-height="4" align="Center" />
+    <horizontal preferred-width="110" preferred-height="9" pad="1"
+                child-control-width="false" child-control-height="false"
+                child-expand-width="false" child-expand-height="false" child-align="MiddleCenter">
+        <text text="NPS" hover-hint="Average notes per second. This estimates intensity, not technical difficulty."
+              align="Left" color="#9E9E9E" font-size="3"
+              preferred-width="18" preferred-height="7" />
+        <text-segments id="nps-segments" data="npsOptions" select-cell="npsSelected"
+                       preferred-width="88" preferred-height="7" size-delta-y="7" />
+        <image id="nps-slider" ignore-layout="true" />
+    </horizontal>
+    <horizontal preferred-width="110" preferred-height="9" pad="1"
+                child-control-width="false" child-control-height="false"
+                child-expand-width="false" child-expand-height="false" child-align="MiddleCenter">
+        <text text="NJS" hover-hint="Note jump speed: how fast notes approach you. ANY leaves this unrestricted."
+              align="Left" color="#9E9E9E" font-size="3"
+              preferred-width="18" preferred-height="7" />
+        <text-segments id="njs-segments" data="njsOptions" select-cell="njsSelected"
+                       preferred-width="88" preferred-height="7" size-delta-y="7" />
+        <image id="njs-slider" ignore-layout="true" />
+    </horizontal>
+    <horizontal preferred-width="110" preferred-height="9" pad="1"
+                child-control-width="false" child-control-height="false"
+                child-expand-width="false" child-expand-height="false" child-align="MiddleCenter">
+        <text text="Style" hover-hint="BeatSaver map tags. Untagged maps are included only with ANY."
+              align="Left" color="#9E9E9E" font-size="3"
+              preferred-width="18" preferred-height="7" />
+        <text-segments id="style-segments" data="styleOptions" select-cell="styleSelected"
+                       preferred-width="88" preferred-height="7" size-delta-y="7" />
+        <image id="style-slider" ignore-layout="true" />
+    </horizontal>
+    <horizontal preferred-width="110" preferred-height="9" pad="1"
+                child-control-width="false" child-control-height="false"
+                child-expand-width="false" child-expand-height="false" child-align="MiddleCenter">
+        <text text="Duration" align="Left" color="#9E9E9E" font-size="3"
+              preferred-width="18" preferred-height="7" />
+        <text-segments id="duration-segments" data="durationOptions" select-cell="durationSelected"
+                       preferred-width="88" preferred-height="7" size-delta-y="7" />
+        <image id="duration-slider" ignore-layout="true" />
+    </horizontal>
+    <horizontal preferred-width="110" preferred-height="9" pad="1"
+                child-control-width="false" child-control-height="false"
+                child-expand-width="false" child-expand-height="false" child-align="MiddleCenter">
+        <text text="Quality" hover-hint="GOOD: score 80%+, 10 votes. TOP: 90%+, 30 votes. CURATED: selected by BeatSaver curators."
+              align="Left" color="#9E9E9E" font-size="3"
+              preferred-width="18" preferred-height="7" />
+        <text-segments id="quality-segments" data="qualityOptions" select-cell="qualitySelected"
+                       preferred-width="88" preferred-height="7" size-delta-y="7" />
+        <image id="quality-slider" ignore-layout="true" />
+    </horizontal>
+    <horizontal preferred-width="110" preferred-height="8" spacing="4"
+                child-control-width="false" child-control-height="false"
+                child-expand-width="false" child-expand-height="false" child-align="MiddleCenter">
+        <button id="standard-button" text="" on-click="toggleStandard" stroke-visible="false"
+                preferred-width="51" preferred-height="7" pad="0">
+            <text id="standard-label" text="TWO SABER ONLY" font-size="3" align="Center" word-wrap="false" />
+        </button>
+        <button id="secret-button" text="" on-click="toggleSecret" stroke-visible="false"
+                preferred-width="51" preferred-height="7" pad="0">
+            <text id="secret-label" text="SECRET DIFFICULTY" font-size="3" align="Center" word-wrap="false" />
+        </button>
+    </horizontal>
+    <action-button id="find-button" text="~findButtonText" on-click="findPressed"
+                   preferred-width="106" preferred-height="10" />
+    <button text="CANCEL" on-click="cancelLoading" active="~searchInProgress"
+            preferred-width="38" preferred-height="7" />
+</vertical>
