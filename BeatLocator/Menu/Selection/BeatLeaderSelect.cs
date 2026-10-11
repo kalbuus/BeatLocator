@@ -209,6 +209,11 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
     [UIAction("find-btn-action")]
     private void OnFindPressed()
     {
+        if (_searchInProgress)
+        {
+            _flowCoordinator.CancelLoading();
+            return;
+        }
         SetSearchInProgress(true);
         _flowCoordinator.FindBeatLeaderMapAsync(
             _playedEnabled,
@@ -263,7 +268,7 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
     {
         base.DidActivate(firstActivation, addedToHierarchy, screenSystemEnabling);
         SyncDurationSelection();
-        _findButton.interactable = !_searchInProgress;
+        _findButton.interactable = true;
         ForceMenuLayoutRebuild();
         StartCoroutine(RebuildMenuLayoutNextFrame());
     }
@@ -285,13 +290,19 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
     {
         _searchInProgress = searchInProgress;
         FindButtonText = searchInProgress
-            ? "<b>LOADING...</b>"
+            ? "<b>CANCEL SEARCH</b>"
             : "<b>FIND SOME MAPS!</b>";
         NotifyPropertyChanged(nameof(FindButtonText));
         if (_findButton != null)
         {
-            _findButton.interactable = !searchInProgress;
+            _findButton.interactable = true;
         }
+    }
+
+    [UIAction("gameplay-settings")]
+    private void GameplaySettingsPressed()
+    {
+        _flowCoordinator.ToggleGameplaySettings();
     }
 
     private ToggleButtonVisual CreateToggleVisual(

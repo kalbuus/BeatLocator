@@ -40,6 +40,9 @@ internal static class SSWebUtil
     private static DateTimeOffset _nextScoreCheckAt = DateTimeOffset.MinValue;
 
     internal static string? UserId { get; private set; }
+    private static string? _cachedProfilePlayer;
+    private static List<PlayerScoreEntry>? _cachedProfile;
+    private static DateTimeOffset _profileFetchedAt;
 
     internal sealed class SearchContext
     {
@@ -310,6 +313,10 @@ internal static class SSWebUtil
             }
 
             UserId = userInfo.platformUserId;
+            RecommendationEngine.SetProfilePlayer(RankingProvider.ScoreSaber, UserId);
+            if (_cachedProfilePlayer != UserId) _cachedProfile = null;
+            if (_cachedProfile != null && DateTimeOffset.UtcNow - _profileFetchedAt < TimeSpan.FromMinutes(2))
+                return _cachedProfile;
             var limit = Math.Min(Math.Max(playNumber, 1), MaximumApiPageSize);
             var scores = new List<PlayerScoreEntry>(playNumber);
             var seenScoreIds = new HashSet<long>();
@@ -324,26 +331,30 @@ internal static class SSWebUtil
                 cancellationToken);
             var topScan = default(ProfileScorePageScan);
 
-            // ScoreSaber has no ranked-only player score filter. If ordinary saved
-            // plays fill the recent pages, its PP ordering is a bounded way to reach
-            // ranked scores without walking an arbitrarily large account history.
-            if (scores.Count < playNumber && recentScan.HasMorePages)
+            // Recent form is primary; a bounded top sample supplies additional evidence.
+            // ScoreSaber has no ranked-only profile filter, so either scan may contain unranked plays.
+            if (recentScan.HasMorePages)
             {
-                topScan = await AppendProfileScorePagesAsync(
-                    UserId,
-                    "top",
-                    limit,
-                    MaximumProfileTopScorePages,
-                    playNumber,
-                    scores,
-                    seenScoreIds,
-                    cancellationToken);
+                try
+                {
+                    topScan = await AppendProfileScorePagesAsync(
+                        UserId, "top", limit, MaximumProfileTopScorePages,
+                        scores.Count + playNumber, scores, seenScoreIds, cancellationToken);
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception exception)
+                {
+                    Plugin.Log.Warn($"[Skill] ScoreSaber top sample unavailable; retaining recent results: {exception.Message}");
+                }
             }
 
             Plugin.Log.Info(
                 $"ScoreSaber profile scan loaded {scores.Count} cleared ranked play(s) " +
                 $"after inspecting {recentScan.Entries + topScan.Entries} score(s) on " +
                 $"{recentScan.Pages} recent page(s) and {topScan.Pages} top page(s).");
+            _cachedProfilePlayer = UserId;
+            _cachedProfile = scores;
+            _profileFetchedAt = DateTimeOffset.UtcNow;
             return scores;
         }
         catch (OperationCanceledException)
@@ -353,7 +364,7 @@ internal static class SSWebUtil
         catch (Exception exception)
         {
             Plugin.Log.Error($"Could not request ScoreSaber scores: {exception}");
-            return null;
+            return _cachedProfile;
         }
     }
 
@@ -424,13 +435,18 @@ internal static class SSWebUtil
 
         profileScore = new PlayerScoreEntry
         {
+            Id = score.Id,
+            Modifiers = string.Join(",", score.Mods ?? Array.Empty<string>()),
             Accuracy = score.Accuracy,
             Timepost = checked((int)playedAt.ToUnixTimeSeconds()),
             Leaderboard = new ScoreLeaderboard
             {
+                Song = new ScoreSong { Hash = entry.Leaderboard?.Map?.Hash },
                 Difficulty = new ScoreDifficulty
                 {
-                    Stars = stars.Value
+                    Stars = stars.Value,
+                    DifficultyName = GetDifficultyName(entry.Leaderboard?.Difficulty?.Difficulty ?? 0, null),
+                    ModeName = entry.Leaderboard?.Difficulty?.GameMode
                 }
             }
         };
@@ -455,7 +471,7 @@ internal static class SSWebUtil
                     "ScoreSaber player ID is unavailable. Load the player score history first.");
             }
 
-            var minimumStars = Math.Max(0f, expectedStars - starBuffer);
+            var minimumStars = RecommendationEngine.GetMinimumCandidateStars(expectedStars, starBuffer, mapDifficulty);
             var maximumStars = Math.Min(20f, expectedStars + starBuffer);
             var sortBy = mapDifficulty == 0 || mapDifficulty == 4
                 ? "stars"
@@ -1041,6 +1057,8 @@ internal static class SSWebUtil
 
     private sealed class ScoreSaberScore
     {
+        [JsonProperty("mods")]
+        public string[]? Mods { get; set; }
         [JsonProperty("id")]
         public long Id { get; set; }
 

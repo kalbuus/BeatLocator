@@ -1,8 +1,12 @@
 # Build outputs
+# Local instructions for debug
+/docs/*.md
+
 [Bb]in/
 [Oo]bj/
 /artifacts/
 /TestResults/
+/tests/
 /BenchmarkDotNet.Artifacts/
 *.log
 *.tmp

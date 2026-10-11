@@ -8,6 +8,14 @@ namespace BeatLocator.EvaluationManagers;
 /// </summary>
 internal sealed class PlayerScoreEntry
 {
+    [JsonProperty("id")]
+    public long Id { get; set; }
+    [JsonProperty("modifiers")]
+    public string Modifiers { get; set; } = string.Empty;
+    [JsonIgnore]
+    public bool Failed { get; set; }
+    [JsonIgnore]
+    public bool Local { get; set; }
     [JsonProperty("accuracy")]
     public float Accuracy { get; set; }
 
@@ -20,15 +28,21 @@ internal sealed class PlayerScoreEntry
 
 internal sealed class ScoreLeaderboard
 {
+    [JsonProperty("id")]
+    public string? Id { get; set; }
+    [JsonProperty("song")]
+    public ScoreSong? Song { get; set; }
     [JsonProperty("difficulty")]
     public ScoreDifficulty? Difficulty { get; set; }
 }
 
-internal sealed class ScoreDifficulty
+internal sealed class ScoreSong
 {
-    [JsonProperty("stars")]
-    public float? Stars { get; set; }
+    [JsonProperty("hash")]
+    public string? Hash { get; set; }
 }
+
+internal sealed class ScoreDifficulty : RecommendationDifficulty { }
 
 internal sealed class RecommendationMap
 {
@@ -66,8 +80,20 @@ internal sealed class RecommendationMap
     public List<RecommendationDifficulty>? Difficulties { get; set; }
 }
 
-internal sealed class RecommendationDifficulty
+internal class RecommendationDifficulty
 {
+    [JsonProperty("status")]
+    public int? BeatLeaderStatus { get; set; }
+    [JsonIgnore]
+    internal float? EvaluationStars { get; set; }
+    [JsonIgnore]
+    internal string EvaluationSpeed { get; set; } = string.Empty;
+    [JsonProperty("accRating")]
+    public float? AccRating { get; set; }
+    [JsonProperty("maxScore")]
+    public int MaxScore { get; set; }
+    [JsonProperty("modifiersRating")]
+    public Dictionary<string, float>? ModifiersRating { get; set; }
     [JsonProperty("difficultyName")]
     public string? DifficultyName { get; set; }
 

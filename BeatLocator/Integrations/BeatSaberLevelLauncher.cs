@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using BeatLocator.EvaluationManagers;
 
@@ -28,15 +29,17 @@ internal static class BeatSaberLevelLauncher
     }
 
     public static async Task<ResolvedLevel> ResolveAsync(
-        EvaluatedDifficulty selectedDifficulty)
+        EvaluatedDifficulty selectedDifficulty,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var hash = BetterSongSearchDownloadManager.GetMapHash(selectedDifficulty.Map);
         var levelId = CustomLevelIdPrefix + hash.ToUpperInvariant();
         var level = SongCore.Loader.BeatmapLevelsModelSO.GetBeatmapLevel(levelId);
 
         if (level == null || SongCore.Loader.AreSongsLoading)
         {
-            await WaitForSongCoreLevelPacksAsync(levelId, level == null);
+            await WaitForSongCoreLevelPacksAsync(levelId, level == null, cancellationToken);
             level = SongCore.Loader.BeatmapLevelsModelSO.GetBeatmapLevel(levelId);
         }
 
@@ -46,13 +49,15 @@ internal static class BeatSaberLevelLauncher
                 $"SongCore did not load map {hash} within 15 seconds.");
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         var key = FindBeatmapKey(level, selectedDifficulty.Difficulty);
         return new ResolvedLevel(level, key);
     }
 
     private static async Task WaitForSongCoreLevelPacksAsync(
         string levelId,
-        bool requestRefresh)
+        bool requestRefresh,
+        CancellationToken cancellationToken)
     {
         var completionSource = new TaskCompletionSource<bool>(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -64,6 +69,8 @@ internal static class BeatSaberLevelLauncher
         SongCore.Loader.OnLevelPacksRefreshed += OnLevelPacksRefreshed;
         try
         {
+            using var registration = cancellationToken.Register(
+                () => completionSource.TrySetCanceled());
             // Recheck after subscribing so a refresh that completed between the
             // caller's lookup and this handler cannot leave us waiting forever.
             var level = SongCore.Loader.BeatmapLevelsModelSO.GetBeatmapLevel(levelId);
@@ -98,8 +105,10 @@ internal static class BeatSaberLevelLauncher
 
     public static async Task SelectDifficultyAsync(
         SoloFreePlayFlowCoordinator flowCoordinator,
-        ResolvedLevel resolvedLevel)
+        ResolvedLevel resolvedLevel,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var navigationController = GetFieldValue(
             flowCoordinator,
             typeof(LevelSelectionFlowCoordinator),
@@ -133,7 +142,7 @@ internal static class BeatSaberLevelLauncher
                 break;
             }
 
-            await Task.Delay(SelectionPollMilliseconds);
+            await Task.Delay(SelectionPollMilliseconds, cancellationToken);
         }
 
         if (currentKey.levelId != resolvedLevel.Key.levelId ||
@@ -161,6 +170,7 @@ internal static class BeatSaberLevelLauncher
                 method.Name == "SetContent" && method.GetParameters().Length == 6)
             ?? throw new MissingMethodException(detailView.GetType().Name, "SetContent");
 
+        cancellationToken.ThrowIfCancellationRequested();
         setContentMethod.Invoke(detailView, new[]
         {
             (object)resolvedLevel.Level,
@@ -174,6 +184,7 @@ internal static class BeatSaberLevelLauncher
         // Let the segmented controls apply their values before the normal Play
         // handler reads the selected key.
         await Task.Yield();
+        cancellationToken.ThrowIfCancellationRequested();
 
         currentKey = (BeatmapKey)currentKeyProperty.GetValue(detailView, null);
         if (!KeysMatch(currentKey, resolvedLevel.Key))

@@ -13,6 +13,7 @@ internal sealed class RoulettePlaySessionManager
     private readonly PostLevelUiState _uiState;
     private long _nextRunId;
     private RoulettePlaySession? _current;
+    internal EvaluatedDifficulty? LastSelection { get; private set; }
 
     internal static RoulettePlaySessionManager? Instance { get; private set; }
 
@@ -56,6 +57,7 @@ internal sealed class RoulettePlaySessionManager
                 _beatLeaderUploadObserver.UsesLegacyObserver,
                 cancellationSource);
             _current = current;
+            LastSelection = selection;
         }
 
         _uiState.Begin(current.RunId, current.Provider);
