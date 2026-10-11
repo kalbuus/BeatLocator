@@ -264,4 +264,18 @@ internal sealed class PostLevelUiState
             _vanillaContinuePressed = false;
         }
     }
+
+    internal void CancelPending()
+    {
+        lock (_sync)
+        {
+            _activeRunId = 0;
+            _completionConfirmed = false;
+            _result = null;
+            _terminalResult = null;
+            _taken = false;
+            _terminalTaken = false;
+            _vanillaContinuePressed = false;
+        }
+    }
 }

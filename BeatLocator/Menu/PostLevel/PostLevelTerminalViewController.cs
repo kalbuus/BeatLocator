@@ -84,4 +84,18 @@ internal sealed class PostLevelTerminalViewController : BSMLAutomaticViewControl
         SetButtonsInteractable(false);
         _flowCoordinator.StartNextRoulette();
     }
+
+    [UIAction("solo")]
+    private async void SoloPressed()
+    {
+        SetButtonsInteractable(false);
+        if (!await _flowCoordinator.OpenInSoloAsync() && isActivated)
+            SetButtonsInteractable(true);
+    }
+
+    [UIAction("gameplay-settings")]
+    private void GameplaySettingsPressed()
+    {
+        _flowCoordinator.ToggleGameplaySettings();
+    }
 }

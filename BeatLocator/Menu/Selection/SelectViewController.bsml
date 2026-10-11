@@ -105,13 +105,11 @@
             pref-height="10"
             font-size="4" />
 
-    <!-- Temporary post-level test button. Uncomment when UI debugging is needed.
-    <button on-click="debugCompletedPressed"
-            text="DEBUG: LEVEL COMPLETED"
-            hover-hint="Temporary post-level UI test"
+    <button on-click="debugUiPressed" active="~debugUiEnabled"
+            text="DEBUG UI"
+            hover-hint="Preview BeatLocator screens with sample data"
             pref-width="83"
             pref-height="8"
             font-size="3.5" />
-    -->
 
 </vertical>

@@ -14,7 +14,7 @@ Provider-specific behavior lives in
 
 For each ranking provider, BeatLocator:
 
-1. Loads up to 100 valid ranked results from the player's profile.
+1. Loads bounded recent and top ranked results, with a short provider cache.
 2. Builds a player-specific relationship between map stars and achieved accuracy.
 3. Converts that model into five difficulty targets.
 4. Requests ranked candidates around the selected target.
@@ -26,93 +26,77 @@ For each ranking provider, BeatLocator:
 The selected difficulty is final. The roulette animation presents that result;
 it does not perform another random selection.
 
-## Player Score Data
+## Stable Player Skill
 
-The skill model uses at most 100 valid ranked plays per provider. A play is usable when it contains a positive star rating, a usable timestamp, and an accuracy strictly between 0 and 100 percent.
+The pure estimator lives in
+[`PlayerSkillEstimator`](BeatLocator/EvaluationManagers/PlayerSkillEstimator.cs).
+Its formulas, normalization rules, live updates and runtime checks are detailed in
+[`stable-skill-recommendations.md`](docs/stable-skill-recommendations.md).
 
-### BeatLeader
+BeatLeader loads 100 recent and 100 top-PP ranked scores, deduplicated by score ID.
+ScoreSaber scans up to three recent pages and, when more history exists, up to
+three top pages, retaining ranked CLEAR results. Original score timestamps are
+preserved. Provider caches expire after two minutes and are isolated by player.
 
-BeatLocator requests the player's 100 most recent ranked scores, ordered by date. The signed-in player ID is obtained through the installed BeatLeader mod.
+BeatLeader speed-modified observations use SS/FS/SF stars and component ratings
+from `difficulty.modifiersRating`, together with raw accuracy. Unsupported modifiers
+and missing speed ratings are excluded. Candidates also account for the active
+BeatLeader speed setting, using actual API ratings for local eligibility checks.
 
-### ScoreSaber
-
-ScoreSaber does not provide a ranked-only filter for a player's score history. BeatLocator therefore scans a bounded number of pages:
-
-- up to three pages ordered by `recent`;
-- if fewer than 100 valid ranked clears were found and more history exists, up
-  to three pages ordered by `top`;
-- duplicate score IDs, unranked entries, and outcomes other than `CLEAR` are
-  ignored.
-
-This keeps profile loading bounded while still reaching ranked scores when ordinary saved plays occupy the newest pages.
-
-## Play Weighting
-
-Each valid play becomes a sample containing stars, accuracy, and a weight.
-BeatLocator combines a recency weight and an accuracy-quality weight:
+Recency weights multiply decay in elapsed days and number of newer observations:
 
 ```text
-dateWeight = 0.5 ^ (ageInDays / 30)
-sampleWeight = 0.3 * dateWeight + 0.7 * accuracyWeight
+weight = 0.5 ^ (daysBehindNewest / 45) * 0.5 ^ (sortedIndex / 60)
 ```
 
-The recency component has a 30-day half-life. 
-The accuracy component reduces the influence of very low clears and unusually high scores:
-
-| Accuracy | Accuracy weight |
-|---|---:|
-| Below 70% | 0.10 |
-| 70% to below 80% | 0.50 |
-| 80% to 97% | 1.00 |
-| Above 97% to 99% | 0.60 |
-| Above 99% | 0.25 |
-
-*At least five valid samples are required.*
-
-## Skill Model
-
-Accuracy is converted to logit space:
-
-```text
-logitAccuracy = ln(accuracy / (1 - accuracy))
-```
-
-BeatLocator then fits a weighted linear model:
-
-```text
-logitAccuracy = intercept + slope * stars
-```
-
-The fitted slope must be meaningfully negative, because accuracy is expected to decrease as map difficulty increases. Model creation fails when the samples have too little star variation or produce a slope greater than or equal to `-0.01`.
-
-The center of the player's range is the weighted average star rating of the valid samples, clamped to the supported 1–15 star range.
+Weights below 0.001 are discarded. A bounded, regularized negative accuracy
+slope translates each play into capability at a player-specific reference accuracy (80-90%).
+Sparse, flat or positive-slope profiles use a conservative fallback slope, so
+one valid ranked result is sufficient. Ordinary difficulty uses a weighted history
+mean, allowing at most 0.75 stars of positive accuracy reserve per result. Hard
+challenges and component budgets use up to 60 comparable results. Fitted slope
+influence is limited to 35%; a short session does not erase established skill.
 
 ## Difficulty Presets
 
-The five UI presets are points on the fitted accuracy curve relative to the player's center:
+SUPER EASY/EASY/OKAY/A BIT HARD use player-specific accuracy anchors around the
+ordinary history center. Reference accuracy is the weighted history mean plus
+two percentage points, bounded to 80-90%.
+Comfort and A BIT HARD are bounded by recent hard-clear evidence.
+END ME uses a separate recent challenge boundary, with only a small accuracy
+reserve and a bounded step for Barely Possible/Actually Impossible. It does not
+extrapolate toward 80%/70% accuracy.
 
-| Preset | Target logit relative to center | Maximum distance from center |
-|---|---:|---:|
-| `SUPER EASY` | +0.75 | 3.00 stars |
-| `EASY` | +0.35 | 1.75 stars |
-| `OKAY` | center | 0 stars |
-| `A BIT HARD` | -0.25 | 1.75 stars |
-| `END ME` — Barely Possible | -0.35 | 3.00 stars |
-| `END ME` — Actually Impossible | -0.75 | 3.00 stars |
+BeatLeader END ME selects from sampled real candidates, accounting for component
+suitability and user filters. Catalogue saturation adjusts selection without
+changing estimated skill. Both modes may converge when the available challenge
+pool is tiny. See [experimental-challenge-model.md](docs/experimental-challenge-model.md)
+for formulas, sampling limits, offline results and runtime validation needs.
+ScoreSaber still uses its bounded star-window search.
 
-A positive logit offset targets higher expected accuracy and therefore an easier map. A negative offset targets lower expected accuracy and therefore a harder map. Every result is also clamped to 1–15 stars.
+Component budgets constrain unsupported acc/pass/tech challenges in BeatLeader.
+Shared stars and sparse-profile fallbacks remain separate for each provider.
 
-The calculated range is cached separately for BeatLeader and ScoreSaber. When the `END ME` behavior is changed in settings, cached score samples are reused to recalculate the range without downloading the profile again.
+## Immediate Updates
+
+Completed roulette clears are appended to result history before PP upload,
+including NonPB clears. The same estimator recalculates the accumulated history,
+without separate per-play form adjustments. Failed attempts, Quit, Restart,
+practice, invalidation and unsupported modifiers are excluded.
+
+Local observations survive API refresh without double-counting an uploaded PB.
+They are kept in memory for the current process. Immediate learning currently
+covers roulette attempts; other provider PBs arrive on the next profile refresh.
 
 ## Candidate Search
 
-Every search begins at the selected target with a `±0.5` star window. If the provider returns maps but no eligible difficulty can be selected, the shared engine expands the window in 0.5-star steps:
+Every search begins at the selected target with a requested `+-0.5` star window, reduced for weak players. If the provider returns maps but no eligible difficulty can be selected, the shared engine expands the window in 0.5-star steps:
 
 ```text
-±0.5 -> ±1.0 -> ±1.5 -> ±2.0
++-0.5 -> +-1.0 -> +-1.5 -> +-2.0
 ```
 
-The search never expands farther than two stars from the calculated target. It returns a filter-change error instead of selecting a clearly unsuitable map. Transport or provider failures are not treated as empty candidate sets and do not trigger unlimited widening.
+The search expands at most `min(2, max(0.15, target * 0.3))` stars from the calculated target. The sequence above applies when the cap is two stars. It returns a filter-change error instead of selecting a clearly unsuitable map. Transport or provider failures are not treated as empty candidate sets and do not trigger unlimited widening.
 
 ### BeatLeader Candidate Sampling
 
@@ -139,9 +123,9 @@ Duration is a hard filter and never contributes bonus points to a candidate. The
 | Setting | Accepted duration |
 |---|---|
 | `ANY` | No restriction |
-| `SHORT` | 0:00–1:00 |
-| `SMALL` | 1:00–2:30 |
-| `NORMAL` | 2:00–4:00 |
+| `SHORT` | 0:00-1:00 |
+| `SMALL` | 1:00-2:30 |
+| `NORMAL` | 2:00-4:00 |
 | `LONG` | 4:00 and longer |
 
 BeatLeader applies these bounds in the provider request. ScoreSaber candidates are filtered after their duration has been resolved through BeatSaver.
@@ -245,8 +229,7 @@ Once a candidate passes all checks, its map and exact provider difficulty are st
 The engine returns a user-facing failure instead of a recommendation when, for example:
 
 - the provider score history cannot be loaded;
-- fewer than five usable ranked clears are available;
-- the samples cannot produce a meaningful decreasing accuracy curve;
+- no comparable ranked result with usable ratings is available;
 - provider transport or authentication fails;
 - filters remove all candidates within the bounded star range;
 - every matching map has already appeared in the current session;

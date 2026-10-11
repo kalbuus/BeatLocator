@@ -132,10 +132,22 @@
         </button>
     </horizontal>
     
-    <action-button id="find-button"
-                   text="~findButtonText" 
-                   on-click="find-btn-action" 
-                   preferred-width="95" 
-                   preferred-height="11" />
+    <horizontal preferred-width="95" preferred-height="11"
+                child-control-width="false" child-control-height="false"
+                child-expand-width="false" child-expand-height="false"
+                child-align="MiddleCenter" spacing="2">
+        <button text="" on-click="gameplay-settings"
+                hover-hint="Settings &amp; modifiers"
+                preferred-width="11" preferred-height="8">
+            <image src="#SettingsIcon" ignore-layout="true" preserve-aspect="true"
+                   anchor-min="0.5 0.5" anchor-max="0.5 0.5"
+                   anchored-position="0 0" size-delta="3.5 3.5" raycast-target="false" />
+        </button>
+        <action-button id="find-button"
+                       text="~findButtonText"
+                       on-click="find-btn-action"
+                       preferred-width="82"
+                       preferred-height="8" />
+    </horizontal>
 
 </vertical>
