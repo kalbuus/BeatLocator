@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Net.Http;
 using System.Reflection;
 using System.Threading;
@@ -22,14 +23,17 @@ internal static class BLWebUtil
     private const int ZeroScorePpConfirmationSeconds = 2;
     private const int ZeroPpSettlementWindowSeconds = 30;
     private const int ProfileFallbackGraceSeconds = 10;
-    private const float MinimumRankedStars = 1f;
-    private const float MaximumRankedStars = 15f;
+    private const float MinimumRankedStars = PlayerSkillEstimator.MinimumStars;
+    private const float MaximumRankedStars = PlayerSkillEstimator.MaximumStars;
     private static readonly HttpClient HttpClient = new HttpClient();
     private static readonly object MapPageCursorSync = new object();
     private static readonly Dictionary<string, int> NextMapPageByQuery =
         new Dictionary<string, int>(StringComparer.Ordinal);
     
     internal static string? userId = string.Empty;
+    private static string? _cachedProfilePlayer;
+    private static List<PlayerScoreEntry>? _cachedProfile;
+    private static DateTimeOffset _profileFetchedAt;
     
     /// <summary>
     /// Waits for BeatLeader to finish its normal sign-in/profile request and then loads
@@ -42,8 +46,22 @@ internal static class BLWebUtil
         userId = await GetBeatLeaderUserIdAsync(cancellationToken).ConfigureAwait(false);
         if (userId != null)
         {
-            return await FetchScoresAsync(userId, playNumber, cancellationToken)
-                .ConfigureAwait(false);
+            RecommendationEngine.SetProfilePlayer(RankingProvider.BeatLeader, userId);
+            if (_cachedProfilePlayer != userId) _cachedProfile = null;
+            if (_cachedProfile != null && DateTimeOffset.UtcNow - _profileFetchedAt < TimeSpan.FromMinutes(2))
+                return _cachedProfile;
+            var recent = await FetchScoresAsync(userId, playNumber, cancellationToken).ConfigureAwait(false);
+            if (recent == null) return _cachedProfile;
+            var top = await FetchScoresAsync(userId, playNumber, cancellationToken, "pp").ConfigureAwait(false);
+            var merged = recent.Concat(top ?? new List<PlayerScoreEntry>())
+                .GroupBy(s => s.Id != 0 ? "id:" + s.Id :
+                    $"{s.Leaderboard?.Id}:{s.Timepost}:{s.Modifiers}")
+                .Select(g => g.First()).OrderByDescending(s => s.Timepost).ToList();
+            _cachedProfilePlayer = userId;
+            _cachedProfile = merged;
+            _profileFetchedAt = DateTimeOffset.UtcNow;
+            Plugin.Log.Info($"[Skill] BeatLeader loaded recent={recent.Count}, top={top?.Count ?? 0}, unique={merged.Count}; cache=2min.");
+            return merged;
         }
         Plugin.Log.Warn("BeatLeader user ID was not available; scores were not requested.");
         return null;
@@ -86,12 +104,13 @@ internal static class BLWebUtil
     private static async Task<List<PlayerScoreEntry>?> FetchScoresAsync(
         string userId,
         int playNumber,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string sortBy = "date")
     {
         try
         {
             var uri =
-                GetBeatLeaderApiUrl() + $"/player/{Uri.EscapeDataString(userId)}/scores?sortBy=date&order=desc" +
+                GetBeatLeaderApiUrl() + $"/player/{Uri.EscapeDataString(userId)}/scores?sortBy={sortBy}&order=desc" +
                 $"&page=1&count={playNumber}&type=ranked";
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
             request.Headers.TryAddWithoutValidation("Accept", "text/plain");
@@ -140,7 +159,9 @@ internal static class BLWebUtil
         int mapDifficulty,
         SongDurationFilter durationFilter,
         int count,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string speed = "",
+        bool challengeCatalogue = false)
     {
         try
         {
@@ -156,8 +177,14 @@ internal static class BLWebUtil
                 1 or 2 or 3 or 4 => "desc",
                 _ => "desc"
             };
-            float minStars = Math.Max(MinimumRankedStars, expectedStars - starBuffer);
-            float maxStars = Math.Min(MaximumRankedStars, expectedStars + starBuffer);
+            float minStars = challengeCatalogue ? expectedStars : RecommendationEngine.GetMinimumCandidateStars(expectedStars, starBuffer, mapDifficulty);
+            float maxStars = challengeCatalogue ? starBuffer : Math.Min(MaximumRankedStars, expectedStars + starBuffer);
+            // The maps endpoint filters base stars only. Sample a broader base interval,
+            // then enforce the exact speed-specific interval locally.
+            var minimumRatio = speed == "SF" ? 1.15f : speed == "FS" ? 1.05f : speed == "SS" ? 0.65f : 1f;
+            var maximumRatio = speed == "SF" ? 1.9f : speed == "FS" ? 1.4f : speed == "SS" ? 0.98f : 1f;
+            var queryMinimum = Math.Max(MinimumRankedStars, minStars / maximumRatio);
+            var queryMaximum = Math.Min(MaximumRankedStars, maxStars / minimumRatio);
             
             string? modeSetting = onlyTwoSaber ? "mode=Standard" : null;
             string playedSetting = played ? "played" : "unplayed";
@@ -169,8 +196,8 @@ internal static class BLWebUtil
                 "type=ranked",
                 "allTypes=all",
                 $"mytype={playedSetting}",
-                $"stars_from={minStars.ToString(CultureInfo.InvariantCulture)}",
-                $"stars_to={maxStars.ToString(CultureInfo.InvariantCulture)}",
+                $"stars_from={queryMinimum.ToString(CultureInfo.InvariantCulture)}",
+                $"stars_to={queryMaximum.ToString(CultureInfo.InvariantCulture)}",
                 
             };
             if (modeSetting != null) query.Add(modeSetting);
@@ -196,12 +223,16 @@ internal static class BLWebUtil
                 if (map.Difficulties == null) continue;
 
                 map.Difficulties.RemoveAll(difficulty =>
-                    !difficulty.Stars.HasValue ||
-                    difficulty.Stars.Value < minStars ||
-                    difficulty.Stars.Value > maxStars ||
-                    onlyTwoSaber &&
-                    (difficulty.ModeName == null ||
-                     difficulty.ModeName.IndexOf("Standard", StringComparison.OrdinalIgnoreCase) < 0));
+                {
+                    if (!BeatLeaderCandidateRules.IsRanked(difficulty) ||
+                        !BeatLeaderCandidateRules.MatchesMode(difficulty, onlyTwoSaber) ||
+                        !PlayerSkillEstimator.TryEvaluationDifficulty(difficulty, speed, out var effective) ||
+                        effective.Stars < minStars || effective.Stars > maxStars ||
+                        effective.Stars <= 0) return true;
+                    difficulty.EvaluationStars = effective.Stars;
+                    difficulty.EvaluationSpeed = speed;
+                    return false;
+                });
             }
 
             maps.RemoveAll(map => map.Difficulties == null || map.Difficulties.Count == 0);

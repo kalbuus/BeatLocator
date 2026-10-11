@@ -16,8 +16,8 @@ internal static class RecommendationEngine
 {
     internal const int ProfilePlayNumber = 100;
 
-    private const float MinimumTargetStars = 1f;
-    private const float MaximumTargetStars = 15f;
+    private const float MinimumTargetStars = PlayerSkillEstimator.MinimumStars;
+    private const float MaximumTargetStars = PlayerSkillEstimator.MaximumStars;
     private const float StarBufferStep = 0.5f;
     private const float MaximumAdaptiveStarBuffer = 2f;
     private static readonly System.Random Random = new System.Random();
@@ -27,8 +27,10 @@ internal static class RecommendationEngine
         new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<RankingProvider, List<PlayerScoreEntry>> ProfileScores =
         new Dictionary<RankingProvider, List<PlayerScoreEntry>>();
-    private static readonly Dictionary<RankingProvider, DifficultyRange> PlayerDifficultyRanges =
-        new Dictionary<RankingProvider, DifficultyRange>();
+    private static readonly object ProfileSync = new object();
+    private static readonly Dictionary<RankingProvider, PlayerSkillEstimator.Profile> PlayerProfiles = new();
+    private static readonly Dictionary<RankingProvider, List<PlayerScoreEntry>> LocalScores = new();
+    private static readonly Dictionary<RankingProvider, string> ProfilePlayers = new();
 
     internal delegate Task<List<PlayerScoreEntry>?> ScoreLoader(
         CancellationToken cancellationToken);
@@ -103,20 +105,6 @@ internal static class RecommendationEngine
         internal string? FailureReason { get; }
     }
 
-    internal readonly struct PlaySample
-    {
-        internal PlaySample(float stars, float accuracy, float weight)
-        {
-            Stars = stars;
-            Accuracy = accuracy;
-            Weight = weight;
-        }
-
-        internal float Stars { get; }
-        internal float Accuracy { get; }
-        internal float Weight { get; }
-    }
-
     internal readonly struct DifficultyRange
     {
         internal DifficultyRange(
@@ -156,18 +144,6 @@ internal static class RecommendationEngine
         }
     }
 
-    private readonly struct AccuracyModel
-    {
-        internal AccuracyModel(double intercept, double slope)
-        {
-            Intercept = intercept;
-            Slope = slope;
-        }
-
-        internal double Intercept { get; }
-        internal double Slope { get; }
-    }
-
     private readonly struct DifficultyProfileResult
     {
         private DifficultyProfileResult(DifficultyRange range, string? failureReason)
@@ -202,7 +178,8 @@ internal static class RecommendationEngine
         DifficultyScorer scoreDifficulty,
         CandidateFilter? filterCandidateAsync,
         int samplesPerStarBuffer,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        MapLoader? loadChallengeCatalogueAsync = null)
     {
         var profileResult = await GetDifficultyRangeAsync(
             provider,
@@ -229,11 +206,15 @@ internal static class RecommendationEngine
                 "The selected difficulty preset is invalid. Please choose another difficulty.");
         }
 
+        if (mapDifficulty == 4 && loadChallengeCatalogueAsync != null)
+            return await FindCatalogueChallengeAsync(provider, expectedStars, config, loadChallengeCatalogueAsync,
+                scoreDifficulty, filterCandidateAsync, filterDescription, cancellationToken);
+
         var maximumUsefulBuffer = Math.Max(
             expectedStars - MinimumTargetStars,
             MaximumTargetStars - expectedStars);
         var maximumStarBuffer = Math.Min(
-            MaximumAdaptiveStarBuffer,
+            Math.Min(MaximumAdaptiveStarBuffer, Math.Max(0.15f, expectedStars * 0.3f)),
             maximumUsefulBuffer);
         var currentStarBuffer = Math.Min(
             Math.Max(0f, starBuffer),
@@ -329,26 +310,128 @@ internal static class RecommendationEngine
 
     internal static void RecalculatePlayerDifficultyRanges(PluginConfig config)
     {
-        foreach (var cachedScores in ProfileScores.ToArray())
+        lock (ProfileSync)
+            foreach (var profile in PlayerProfiles)
+                LogProfile(profile.Key, profile.Value, config, "Recalculated");
+    }
+
+    // Catalogue loader arguments are lower/upper effective-star bounds. Sample only
+    // challenging maps and keep account skill unchanged when the catalogue saturates.
+    private static async Task<MapSearchResult> FindCatalogueChallengeAsync(RankingProvider provider,
+        float desired, PluginConfig config, MapLoader catalogue, DifficultyScorer scorer,
+        CandidateFilter? filter, string filterDescription, CancellationToken token)
+    {
+        float floor;
+        lock (ProfileSync)
+            floor = Math.Max(MinimumTargetStars, PlayerProfiles[provider].Center);
+        var candidates = new List<EvaluatedDifficulty>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var page = 0; page < 2; page++)
         {
-            try
+            token.ThrowIfCancellationRequested();
+            var upper = Math.Min(MaximumTargetStars, desired + Math.Min(2f, Math.Max(0.15f, desired * 0.3f)));
+            var sample = await catalogue(floor, upper, token);
+            token.ThrowIfCancellationRequested();
+            if (sample.Maps == null) return MapSearchResult.Failure(
+                "The ranking provider could not load challenge candidates. Check your connection and sign-in.");
+            foreach (var candidate in EvaluateMapDifficulties(ExcludeSessionHistory(sample.Maps), desired, config,
+                (map, difficulty, _, settings) => scorer(map, difficulty,
+                    difficulty.EvaluationStars ?? difficulty.Stars ?? desired, settings)))
             {
-                var difficultyRange = CalculateCenteredDifficultyRange(
-                    CreatePlaySamples(cachedScores.Value),
-                    config.isEndMePossible);
-                SetPlayerDifficultyRange(
-                    cachedScores.Key,
-                    difficultyRange,
-                    "Recalculated");
+                var stars = candidate.Difficulty.EvaluationStars ?? candidate.Difficulty.Stars ?? 0;
+                var key = candidate.Map.Hash + ":" + candidate.Difficulty.ModeName + ":" + candidate.Difficulty.DifficultyName;
+                if (stars >= floor && IsValidWeight(candidate.Score) && seen.Add(key)) candidates.Add(candidate);
             }
-            catch (Exception exception) when (
-                exception is ArgumentException ||
-                exception is InvalidOperationException)
+            if (!sample.HasAdditionalSample) break;
+        }
+        if (candidates.Count == 0) return MapSearchResult.Failure(
+            $"No suitable challenge was found in the sampled ranked catalogue. Try changing the {filterDescription}.");
+        float Stars(EvaluatedDifficulty c) => c.Difficulty.EvaluationStars ?? c.Difficulty.Stars ?? 0;
+        candidates = candidates.OrderBy(Stars).ToList();
+        var ceiling = Stars(candidates[candidates.Count - 1]);
+        var target = desired;
+        if (target > ceiling)
+        {
+            // Both modes can saturate. Possible takes the upper part of the available
+            // challenge pool; Impossible takes its hardest end, never an easy fallback.
+            target = config.isEndMePossible
+                ? Stars(candidates[(int)((candidates.Count - 1) * 0.8f)]) : ceiling;
+            Plugin.Log.Info($"[Challenge] catalogue limited: desired={desired:0.00}, available_target={target:0.00}, ceiling={ceiling:0.00}; player skill unchanged.");
+        }
+        // Sparse catalogues can have gaps even below the ceiling.
+        target = Stars(candidates.OrderBy(c => Math.Abs(Stars(c) - target)).First());
+        Plugin.Log.Info($"[Challenge] desired={desired:0.00}, candidate_target={target:0.00}, candidates={candidates.Count}, floor={floor:0.00}; player skill unchanged.");
+        var bandwidth = Math.Min(0.35f, Math.Max(0.06f, target * 0.04f));
+        var pool = candidates.Where(c => Math.Abs(Stars(c) - target) <= bandwidth * 0.5f)
+            .Select(c => new EvaluatedDifficulty(c.Map, c.Difficulty,
+                c.Score / (1f + Math.Abs(Stars(c) - target) / bandwidth))).ToList();
+        // Rejecting a candidate (e.g. already played) must not silently lower the challenge.
+        var result = await SelectRandomDifficultyAsync(pool, filter, token);
+        if (result.FailureReason != null) return MapSearchResult.Failure(result.FailureReason);
+        if (result.Difficulty == null) return MapSearchResult.Failure("No available map passed the challenge filters.");
+        AddToSessionHistory(result.Difficulty.Map);
+        LogSelection(result.Difficulty);
+        return MapSearchResult.Success(result.Difficulty);
+    }
+
+    internal static void SetProfilePlayer(RankingProvider provider, string playerId)
+    {
+        lock (ProfileSync)
+        {
+            if (ProfilePlayers.TryGetValue(provider, out var previous) && previous == playerId) return;
+            ProfilePlayers[provider] = playerId;
+            ProfileScores.Remove(provider);
+            PlayerProfiles.Remove(provider);
+            LocalScores.Remove(provider);
+        }
+    }
+
+    internal static float GetProfileSuitability(RankingProvider provider, RecommendationDifficulty difficulty, float target)
+    {
+        lock (ProfileSync)
+            return PlayerProfiles.TryGetValue(provider, out var profile) ? profile.Suitability(difficulty, target) : 1f;
+    }
+
+    internal static bool RecordLocalResult(RankingProvider provider, long runId, EvaluatedDifficulty selection,
+        float accuracy, string modifiers, bool failed, DateTimeOffset now)
+    {
+        if (failed) return false;
+        var d = selection.Difficulty;
+        var score = new PlayerScoreEntry
+        {
+            Id = -runId, Accuracy = accuracy, Modifiers = modifiers, Failed = failed, Local = true,
+            Timepost = checked((int)now.ToUnixTimeSeconds()),
+            Leaderboard = new ScoreLeaderboard
             {
-                Plugin.Log.Error(
-                    $"Could not recalculate the {cachedScores.Key.GetDisplayName()} " +
-                    $"player difficulty range: {exception.Message}");
+                Song = new ScoreSong { Hash = selection.Map.Hash },
+                Difficulty = new ScoreDifficulty
+                {
+                    Stars = d.Stars, AccRating = d.AccRating, PassRating = d.PassRating,
+                    TechRating = d.TechRating, ModifiersRating = d.ModifiersRating,
+                    DifficultyName = d.DifficultyName, ModeName = d.ModeName, MaxScore = d.MaxScore
+                }
             }
+        };
+        if (!PlayerSkillEstimator.TryNormalize(score, out _))
+        {
+            Plugin.Log.Info($"[Skill] {provider.GetDisplayName()} run {runId} excluded: unsupported modifiers/ratings ({modifiers}).");
+            return false;
+        }
+        lock (ProfileSync)
+        {
+            if (!LocalScores.TryGetValue(provider, out var local)) LocalScores[provider] = local = new();
+            if (local.Any(s => s.Id == score.Id)) return false;
+            local.Add(score);
+            if (local.Count > 32) local.RemoveAt(0);
+            if (PlayerProfiles.TryGetValue(provider, out var previous) && ProfileScores.TryGetValue(provider, out var remote))
+            {
+                var updated = EstimateHistory(provider, remote, now);
+                PlayerProfiles[provider] = updated;
+                Plugin.Log.Info($"[Skill] {provider.GetDisplayName()} run {runId}: " +
+                    $"{(failed ? "failed" : "cleared")}, accuracy={accuracy:P2}, " +
+                    $"center={previous.Center:0.00} -> {updated.Center:0.00}; result added to history before PP upload.");
+            }
+            return true;
         }
     }
 
@@ -367,150 +450,89 @@ internal static class RecommendationEngine
         return Mathf.Clamp01(difficultyPoints);
     }
 
-    internal static DifficultyRange CalculateCenteredDifficultyRange(
-        IEnumerable<PlaySample> source,
-        bool isEndMePossible)
+    internal static float GetMinimumCandidateStars(float target, float buffer, int preset)
     {
-        if (source == null) throw new ArgumentNullException(nameof(source));
+        // Widen END ME toward harder maps; do not silently turn it into an easier preset.
+        return Math.Max(MinimumTargetStars, preset == 4 ? target : target - buffer);
+    }
 
-        var samples = source
-            .Where(sample =>
-                IsFinite(sample.Stars) &&
-                IsFinite(sample.Accuracy) &&
-                IsFinite(sample.Weight) &&
-                sample.Stars > 0f &&
-                sample.Accuracy > 0f &&
-                sample.Accuracy < 1f &&
-                sample.Weight > 0f)
-            .ToArray();
-        if (samples.Length < 5)
-        {
-            throw new ArgumentException(
-                "At least five cleared ranked plays with star ratings are required.",
-                nameof(source));
-        }
-
-        var model = FitAccuracyModel(samples);
-        var centerStars = Clamp(
-            GetWeightedAverageStars(samples),
-            MinimumTargetStars,
-            MaximumTargetStars);
-        var centerLogit = model.Intercept + model.Slope * centerStars;
-
-        const float innerLogitOffset = 0.35f;
-        const float highLogitOffset = 0.25f;
-        const float outerLogitOffset = 0.75f;
-
-        var minimum = GetBoundedStarsForLogit(
-            model,
-            centerLogit + outerLogitOffset,
-            centerStars,
-            maximumDistance: 3f);
-        var low = GetBoundedStarsForLogit(
-            model,
-            centerLogit + innerLogitOffset,
-            centerStars,
-            maximumDistance: 1.75f);
-        var high = GetBoundedStarsForLogit(
-            model,
-            centerLogit - highLogitOffset,
-            centerStars,
-            maximumDistance: 1.75f);
-        var maximumOffset = isEndMePossible
-            ? innerLogitOffset
-            : outerLogitOffset;
-        var maximum = GetBoundedStarsForLogit(
-            model,
-            centerLogit - maximumOffset,
-            centerStars,
-            maximumDistance: 3f);
-
-        return new DifficultyRange(minimum, low, centerStars, high, maximum);
+    private static DifficultyRange ToRange(PlayerSkillEstimator.Profile profile, PluginConfig config)
+    {
+        return new DifficultyRange(profile.Target(0, config.isEndMePossible),
+            profile.Target(1, config.isEndMePossible), profile.Target(2, config.isEndMePossible),
+            profile.Target(3, config.isEndMePossible), profile.Target(4, config.isEndMePossible));
     }
 
     private static async Task<DifficultyProfileResult> GetDifficultyRangeAsync(
-        RankingProvider provider,
-        PluginConfig config,
-        ScoreLoader loadScoresAsync,
+        RankingProvider provider, PluginConfig config, ScoreLoader loadScoresAsync,
         CancellationToken cancellationToken)
     {
-        if (PlayerDifficultyRanges.TryGetValue(provider, out var cachedRange))
-        {
-            return DifficultyProfileResult.Success(cachedRange);
-        }
-
+        // Adapters check player identity and use a short-lived API cache. Never cache skill forever.
         var scores = await loadScoresAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         if (scores == null)
+            return DifficultyProfileResult.Failure($"Could not load your {provider.GetDisplayName()} score history. Check sign-in and connectivity.");
+        lock (ProfileSync)
         {
-            var serviceName = provider.GetDisplayName();
-            return DifficultyProfileResult.Failure(
-                $"Could not load your {serviceName} score history. " +
-                $"Make sure {serviceName} is signed in and the service is reachable.");
-        }
-
-        DifficultyRange difficultyRange;
-        try
-        {
-            difficultyRange = CalculateCenteredDifficultyRange(
-                CreatePlaySamples(scores),
-                config.isEndMePossible);
-        }
-        catch (Exception exception) when (
-            exception is ArgumentException ||
-            exception is InvalidOperationException)
-        {
-            Plugin.Log.Error(
-                $"Could not calculate the player difficulty range: {exception.Message}");
-            return DifficultyProfileResult.Failure(
-                $"Could not calculate your recommended difficulty: {exception.Message}");
-        }
-
-        ProfileScores[provider] = scores;
-        SetPlayerDifficultyRange(provider, difficultyRange, "Calculated");
-        return DifficultyProfileResult.Success(difficultyRange);
-    }
-
-    private static void SetPlayerDifficultyRange(
-        RankingProvider provider,
-        DifficultyRange difficultyRange,
-        string operation)
-    {
-        PlayerDifficultyRanges[provider] = difficultyRange;
-        Plugin.Log.Info(
-            $"{operation} {provider.GetDisplayName()} difficulty stars: " +
-            $"{difficultyRange.Minimum:0.00}, " +
-            $"{difficultyRange.Low:0.00}, " +
-            $"{difficultyRange.Medium:0.00}, " +
-            $"{difficultyRange.High:0.00}, " +
-            $"{difficultyRange.Maximum:0.00}.");
-    }
-
-    private static IEnumerable<PlaySample> CreatePlaySamples(
-        IReadOnlyList<PlayerScoreEntry> attempts)
-    {
-        foreach (var attempt in attempts)
-        {
-            var stars = attempt.Leaderboard?.Difficulty?.Stars;
-            if (!stars.HasValue) continue;
-
-            const float halfLifeDays = 30f;
-            var playTime = DateTimeOffset.FromUnixTimeSeconds(attempt.Timepost);
-            var daysAgo = (DateTimeOffset.UtcNow - playTime).TotalDays;
-            var dateWeight = Mathf.Pow(0.5f, (float)(daysAgo / halfLifeDays));
-            var accuracyWeight = attempt.Accuracy switch
+            if (ProfileScores.TryGetValue(provider, out var cached) && ReferenceEquals(cached, scores) &&
+                PlayerProfiles.TryGetValue(provider, out var existing))
+                return DifficultyProfileResult.Success(ToRange(existing, config));
+            try
             {
-                < 0.70f => 0.1f,
-                < 0.80f => 0.5f,
-                <= 0.97f => 1f,
-                <= 0.99f => 0.6f,
-                _ => 0.25f
-            };
-
-            yield return new PlaySample(
-                stars.Value,
-                attempt.Accuracy,
-                dateWeight * 0.3f + accuracyWeight * 0.7f);
+                var profile = EstimateHistory(provider, scores, DateTimeOffset.UtcNow);
+                ProfileScores[provider] = scores;
+                PlayerProfiles[provider] = profile;
+                LogProfile(provider, profile, config, "Calculated");
+                return DifficultyProfileResult.Success(ToRange(profile, config));
+            }
+            catch (ArgumentException exception)
+            {
+                Plugin.Log.Warn($"[Skill] {provider.GetDisplayName()} profile unavailable: {exception.Message}");
+                return DifficultyProfileResult.Failure($"Could not calculate recommended difficulty: {exception.Message}");
+            }
         }
+    }
+
+    private static PlayerSkillEstimator.Profile EstimateHistory(RankingProvider provider,
+        List<PlayerScoreEntry> remote, DateTimeOffset now)
+    {
+        LocalScores.TryGetValue(provider, out var local);
+        // Remote upload replaces the same local attempt, never an additional sample.
+        // Non-PB clears remain ordinary history entries while the session is active.
+        var history = local == null ? remote : remote
+            .Where(score => !local.Any(attempt => SameAttempt(score, attempt)))
+            .Concat(local).ToList();
+        return PlayerSkillEstimator.Estimate(history, now);
+    }
+
+    private static bool SameAttempt(PlayerScoreEntry remote, PlayerScoreEntry local)
+    {
+        return !local.Failed && Math.Abs((long)remote.Timepost - local.Timepost) <= 120 &&
+            Math.Abs(remote.Accuracy - local.Accuracy) < 0.0001f &&
+            string.Equals(LearningSpeed(remote.Modifiers), LearningSpeed(local.Modifiers), StringComparison.Ordinal) &&
+            !string.IsNullOrWhiteSpace(local.Leaderboard?.Song?.Hash) &&
+            string.Equals(remote.Leaderboard?.Song?.Hash, local.Leaderboard?.Song?.Hash, StringComparison.OrdinalIgnoreCase) &&
+            remote.Leaderboard?.Difficulty?.DifficultyName == local.Leaderboard?.Difficulty?.DifficultyName &&
+            remote.Leaderboard?.Difficulty?.ModeName == local.Leaderboard?.Difficulty?.ModeName;
+    }
+
+    private static string LearningSpeed(string modifiers)
+    {
+        return modifiers.Split(',').Select(m => m.Trim().ToUpperInvariant())
+            .FirstOrDefault(m => m == "FS" || m == "SF" || m == "SS") ?? string.Empty;
+    }
+
+    private static void LogProfile(RankingProvider provider, PlayerSkillEstimator.Profile profile, PluginConfig config, string operation)
+    {
+        var range = ToRange(profile, config);
+        Plugin.Log.Info($"{operation} {provider.GetDisplayName()} difficulty stars: " +
+            $"{range.Minimum:0.00}, {range.Low:0.00}, {range.Medium:0.00}, {range.High:0.00}, {range.Maximum:0.00}.");
+        Plugin.Log.Info($"[Skill] {provider.GetDisplayName()}: samples={profile.SampleCount}, " +
+            $"speed_normalized={profile.SpeedCount}, excluded={profile.SkippedCount}, " +
+            $"aged_out={profile.AgedOutCount}, " +
+            $"confidence={profile.Confidence}, slope={profile.Slope:0.000}, " +
+            $"recent_challenge={profile.RecentChallenge:0.00}, challenge_boundary={profile.ChallengeBoundary:0.00}, reference_accuracy={profile.ReferenceAccuracy:P1}, " +
+            $"acc/pass/tech={profile.AccBudget:0.00}/{profile.PassBudget:0.00}/{profile.TechBudget:0.00}.");
     }
 
     private static List<EvaluatedDifficulty> EvaluateMapDifficulties(
@@ -681,7 +703,8 @@ internal static class RecommendationEngine
             $"Selected difficulty: {map.Name ?? "<unnamed map>"} - " +
             $"{difficulty.DifficultyName ?? "<unnamed difficulty>"} " +
             $"({difficulty.ModeName ?? "<unknown mode>"}), " +
-            $"{difficulty.Stars:0.00} stars, score: {selectedDifficulty.Score:0.000}.");
+            $"{difficulty.EvaluationStars ?? difficulty.Stars:0.00} stars {difficulty.EvaluationSpeed}, " +
+            $"score: {selectedDifficulty.Score:0.000}.");
     }
 
     private static bool IsValidWeight(float score)
@@ -689,106 +712,4 @@ internal static class RecommendationEngine
         return score > 0f && !float.IsNaN(score) && !float.IsInfinity(score);
     }
 
-    private static float GetWeightedAverageStars(IEnumerable<PlaySample> samples)
-    {
-        double weightedSum = 0d;
-        double totalWeight = 0d;
-        foreach (var sample in samples)
-        {
-            if (sample.Weight <= 0f) continue;
-            weightedSum += sample.Stars * sample.Weight;
-            totalWeight += sample.Weight;
-        }
-
-        if (totalWeight <= 0d)
-        {
-            throw new InvalidOperationException("Total sample weight must be positive.");
-        }
-
-        return (float)(weightedSum / totalWeight);
-    }
-
-    private static float GetBoundedStarsForLogit(
-        AccuracyModel model,
-        double targetLogit,
-        float centerStars,
-        float maximumDistance)
-    {
-        if (Math.Abs(model.Slope) < 0.000001d)
-        {
-            throw new InvalidOperationException("Accuracy curve slope is too small.");
-        }
-
-        var stars = (float)((targetLogit - model.Intercept) / model.Slope);
-        return Clamp(
-            stars,
-            Math.Max(MinimumTargetStars, centerStars - maximumDistance),
-            Math.Min(MaximumTargetStars, centerStars + maximumDistance));
-    }
-
-    private static AccuracyModel FitAccuracyModel(
-        IReadOnlyCollection<PlaySample> samples)
-    {
-        double totalWeight = 0d;
-        double weightedStars = 0d;
-        double weightedLogitAccuracy = 0d;
-        foreach (var sample in samples)
-        {
-            var accuracy = Clamp(sample.Accuracy, 0.01, 0.995);
-            var logitAccuracy = Math.Log(accuracy / (1d - accuracy));
-            totalWeight += sample.Weight;
-            weightedStars += sample.Stars * sample.Weight;
-            weightedLogitAccuracy += logitAccuracy * sample.Weight;
-        }
-
-        if (totalWeight <= 0d)
-        {
-            throw new ArgumentException("Total weight must be positive.");
-        }
-
-        var meanStars = weightedStars / totalWeight;
-        var meanLogitAccuracy = weightedLogitAccuracy / totalWeight;
-        double covariance = 0d;
-        double variance = 0d;
-        foreach (var sample in samples)
-        {
-            var accuracy = Clamp(sample.Accuracy, 0.01, 0.995);
-            var logitAccuracy = Math.Log(accuracy / (1d - accuracy));
-            var starsDifference = sample.Stars - meanStars;
-            var accuracyDifference = logitAccuracy - meanLogitAccuracy;
-            covariance += sample.Weight * starsDifference * accuracyDifference;
-            variance += sample.Weight * starsDifference * starsDifference;
-        }
-
-        if (variance < 0.000001d)
-        {
-            throw new InvalidOperationException(
-                "Played maps have too little star variation.");
-        }
-
-        var slope = covariance / variance;
-        var intercept = meanLogitAccuracy - slope * meanStars;
-        if (slope >= -0.01d)
-        {
-            throw new InvalidOperationException(
-                "Could not determine a meaningful difficulty curve.");
-        }
-
-        return new AccuracyModel(intercept, slope);
-    }
-
-    private static bool IsFinite(float value)
-    {
-        return !float.IsNaN(value) && !float.IsInfinity(value);
-    }
-
-    private static float Clamp(float value, float minimum, float maximum)
-    {
-        return Math.Min(Math.Max(value, minimum), maximum);
-    }
-
-    private static double Clamp(double value, double minimum, double maximum)
-    {
-        return Math.Min(Math.Max(value, minimum), maximum);
-    }
 }

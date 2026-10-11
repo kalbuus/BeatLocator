@@ -33,10 +33,22 @@
             <text id="song-author" text="~songAuthorText" align="Left" font-size="3.2" preferred-height="4.5" />
             <text id="song-mapper" text="~songMapperText" align="Left" font-size="3.2" preferred-height="4.5" />
             <text id="song-difficulty" text="~songDifficultyText" align="Left" font-size="3.2" preferred-height="7" />
-            <horizontal id="song-actions" spacing="1.5" horizontal-fit="PreferredSize" vertical-fit="PreferredSize">
-                <button id="menu-button" text="MENU" on-click="menuPressed" preferred-width="19" preferred-height="7" />
-                <button id="skip-button" text="SKIP" on-click="skipPressed" preferred-width="19" preferred-height="7" />
-                <action-button id="primary-button" text="~primaryButtonText" on-click="primaryPressed" preferred-width="19" preferred-height="7" />
+            <horizontal id="song-actions" spacing="1" preferred-width="62" preferred-height="7"
+                        child-control-width="true" child-control-height="true"
+                        child-expand-width="false" child-expand-height="false">
+                <button id="gameplay-settings-button" text="" on-click="gameplay-settings"
+                        hover-hint="Settings &amp; modifiers"
+                        preferred-width="7" preferred-height="7" flexible-width="0">
+                    <image src="#SettingsIcon" ignore-layout="true" preserve-aspect="true"
+                           anchor-min="0.5 0.5" anchor-max="0.5 0.5"
+                           anchored-position="0 0" size-delta="3.5 3.5" raycast-target="false" />
+                </button>
+                <button id="menu-button" text="MENU" on-click="menuPressed" preferred-width="11" preferred-height="7" flexible-width="0" font-size="3" />
+                <button id="skip-button" text="SKIP" on-click="skipPressed" preferred-width="11" preferred-height="7" flexible-width="0" font-size="3" />
+                <button id="solo-button" text="~soloButtonText" on-click="soloPressed"
+                        hover-hint="Open this map in Solo"
+                        preferred-width="10" preferred-height="7" flexible-width="0" font-size="3" />
+                <action-button id="primary-button" text="~primaryButtonText" on-click="primaryPressed" preferred-width="19" preferred-height="7" flexible-width="0" />
             </horizontal>
         </vertical>
     </horizontal>

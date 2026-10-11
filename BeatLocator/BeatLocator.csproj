@@ -10,6 +10,8 @@
         <!-- https://docs.unity3d.com/2022.3/Documentation/Manual/CSharpCompiler.html -->
         <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
+        <BeatLocatorDebugUI Condition="'$(BeatLocatorDebugUI)' == ''">false</BeatLocatorDebugUI>
+        <DefineConstants Condition="'$(BeatLocatorDebugUI)' == 'true'">$(DefineConstants);BEATLOCATOR_DEBUG_UI</DefineConstants>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <EnableFrameworkPathOverride>true</EnableFrameworkPathOverride>
         <FrameworkPathOverride>$(BeatSaberDir)\Beat Saber_Data\Managed</FrameworkPathOverride>
@@ -27,6 +29,9 @@
     </ItemGroup>
 
     <ItemGroup>
+        <EmbeddedResource Include="Menu\Debug\DebugUiViewController.bsml"
+                          LogicalName="BeatLocator.Menu.DebugUiViewController.bsml"
+                          Condition="'$(BeatLocatorDebugUI)' == 'true'" />
         <EmbeddedResource Include="Assets\off.png" />
         <EmbeddedResource Include="Assets\on.png" />
         <EmbeddedResource Include="Menu\Settings\SettingsMenu.bsml"

@@ -21,8 +21,14 @@ internal static class BLEvaluationManager
         SongDurationFilter durationFilter,
         int count,
         PluginConfig config,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        GameplayModifiers.SongSpeed songSpeed = GameplayModifiers.SongSpeed.Normal)
     {
+        var speed = songSpeed switch
+        {
+            GameplayModifiers.SongSpeed.Faster => "FS", GameplayModifiers.SongSpeed.SuperFast => "SF",
+            GameplayModifiers.SongSpeed.Slower => "SS", _ => string.Empty
+        };
         return RecommendationEngine.FindMapsAsync(
             RankingProvider.BeatLeader,
             mapDifficulty,
@@ -42,7 +48,7 @@ internal static class BLEvaluationManager
                     mapDifficulty,
                     durationFilter,
                     count,
-                    token),
+                    token, speed),
             scoreDifficulty: (map, difficulty, expectedStars, _) =>
                 CalculateDifficultyScore(
                     difficulty,
@@ -50,7 +56,10 @@ internal static class BLEvaluationManager
                     expectedStars),
             filterCandidateAsync: null,
             samplesPerStarBuffer: 2,
-            cancellationToken);
+            cancellationToken,
+            loadChallengeCatalogueAsync: (minimum, maximum, token) => BLWebUtil.FindMapAsync(
+                minimum, played, maximum, onlyTwoSaber, mapBalance, 4, durationFilter,
+                count, token, speed, challengeCatalogue: true));
     }
 
     private static float CalculateDifficultyScore(
@@ -58,6 +67,9 @@ internal static class BLEvaluationManager
         int mapBalance,
         float expectedStars)
     {
+        if (!BeatLeaderCandidateRules.IsRanked(difficulty)) return 0f;
+        if (!PlayerSkillEstimator.TryEvaluationDifficulty(difficulty, difficulty.EvaluationSpeed, out var effective)) return 0f;
+        difficulty = effective;
         var difficultyPoints = RecommendationEngine.CalculateDifficultyPoints(
             difficulty,
             expectedStars);
@@ -72,7 +84,8 @@ internal static class BLEvaluationManager
         var stylePoints = CalculateStylePoints(style, mapBalance);
         if (stylePoints == 0f) return 0f;
 
-        return 0.6f * stylePoints + 0.4f * difficultyPoints;
+        return (0.6f * stylePoints + 0.4f * difficultyPoints) *
+            RecommendationEngine.GetProfileSuitability(RankingProvider.BeatLeader, difficulty, expectedStars);
     }
 
     private static float CalculateStylePoints(float style, int mapBalance)

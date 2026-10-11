@@ -20,6 +20,7 @@ internal enum MapDownloadOutcome
 {
     Installed,
     AlreadyInstalled,
+    Canceled,
     TimedOut,
     Canceled,
     Failed
@@ -28,7 +29,7 @@ internal enum MapDownloadOutcome
 /// <summary>
 /// Owns BeatLocator's menu view and returns to the game's main menu on Back.
 /// </summary>
-internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
+internal sealed partial class BeatLocatorFlowCoordinator : FlowCoordinator
 {
     private const int MapSearchTimeoutMilliseconds = 45000;
     private const int MapDownloadTimeoutMilliseconds = 120000;
@@ -59,6 +60,14 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     private MainFlowCoordinator _mainFlowCoordinator = null!;
     private SoloFreePlayFlowCoordinator _soloFreePlayFlowCoordinator = null!;
     private MenuLightsManager _menuLightsManager = null!;
+    private GameplaySetupViewController _gameplaySetupViewController = null!;
+    private PlayerDataModel _playerDataModel = null!;
+    private bool _gameplaySettingsVisible;
+    private bool _postLevelCanceled;
+    private int _operationGeneration;
+    private EvaluatedDifficulty? _selectedMap;
+    private CancellationTokenSource? _mapDownloadCancellationSource;
+    private CancellationTokenSource? _levelOpenCancellationSource;
     private IPlatformUserModel _platformUserModel = null!;
     private LazyInject<SelectViewController> _selectViewController = null!;
     private LazyInject<BeatLeaderSelect> _beatLeaderSelect = null!;
@@ -104,6 +113,8 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         MainFlowCoordinator mainFlowCoordinator,
         SoloFreePlayFlowCoordinator soloFreePlayFlowCoordinator,
         MenuLightsManager menuLightsManager,
+        GameplaySetupViewController gameplaySetupViewController,
+        PlayerDataModel playerDataModel,
         IPlatformUserModel platformUserModel,
         LazyInject<SelectViewController> selectViewController,
         LazyInject<BeatLeaderSelect> beatLeaderSelect,
@@ -121,6 +132,8 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         _mainFlowCoordinator = mainFlowCoordinator;
         _soloFreePlayFlowCoordinator = soloFreePlayFlowCoordinator;
         _menuLightsManager = menuLightsManager;
+        _gameplaySetupViewController = gameplaySetupViewController;
+        _playerDataModel = playerDataModel;
         _platformUserModel = platformUserModel;
         _selectViewController = selectViewController;
         _beatLeaderSelect = beatLeaderSelect;
@@ -240,6 +253,8 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     internal void ShowRankingSelect()
     {
+        if (ReturnFromDebugPreview()) return;
+        CancelPendingOperations();
         ShowRankingSelect(null);
     }
 
@@ -263,6 +278,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     internal void PresentPostLevelResult(PostLevelDisplayResult result)
     {
+        if (_postLevelCanceled) return;
         _rankingProvider = result.Provider;
         _pendingPostLevelResult = result;
         Plugin.Log.Info(
@@ -282,7 +298,8 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         }
 
         _rankingProvider = provider;
-        _loadingPpRunId = runId;
+        _selectedMap = _playSessionManager.LastSelection;
+        _postLevelCanceled = false;
         var loadingViewController = _postLevelLoadingViewController.Value;
         loadingViewController.SetMessage(provider == RankingProvider.BeatSaver
             ? "LEVEL COMPLETED" : "CALCULATING PP");
@@ -345,6 +362,8 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         }
 
         _rankingProvider = result.Provider;
+        _selectedMap = result.Selection;
+        _postLevelCanceled = false;
         _postLevelRetrySelection = result.Selection;
         var terminalViewController = _postLevelTerminalViewController.Value;
         terminalViewController.SetLevelFailed(result.LevelFailed);
@@ -574,33 +593,6 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         }
     }
 
-    internal void ShowDebugCompletedLevel()
-    {
-        _rankingProvider = RankingProvider.BeatLeader;
-        _postLevelFlowReady = true;
-        _postLevelPresentationInProgress = true;
-        _pendingPostLevelResult = null;
-        var resultViewController = _ppResultViewController.Value;
-        resultViewController.SetResult(new PostLevelDisplayResult
-        {
-            RunId = -1,
-            Provider = RankingProvider.BeatLeader,
-            Outcome = PpResolutionOutcome.UploadedNewBest,
-            ScorePp = 256.42d,
-            ProfileGain = 5.73d,
-            LocalScore = 654321,
-            LocalRank = "SS",
-            LocalMaxCombo = 777,
-            Detail = "Debug post-level result"
-        });
-        Plugin.Log.Info("[PP UI] Showing simulated completed-level result.");
-        ReplaceTopViewController(
-            resultViewController,
-            () => _postLevelPresentationInProgress = false,
-            ViewController.AnimationType.In,
-            ViewController.AnimationDirection.Horizontal);
-    }
-
     private void TryShowPendingPostLevelResult()
     {
         if (!_postLevelFlowReady ||
@@ -624,7 +616,9 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     internal void StartNextRoulette()
     {
-        var generation = _loadingGeneration;
+        if (ReturnFromDebugPreview()) return;
+        CancelPendingOperations();
+        var generation = _operationGeneration;
         _postLevelFlowReady = false;
         _nextSearchFromPostLevel = true;
         var loadingViewController = _postLevelLoadingViewController.Value;
@@ -633,7 +627,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
             loadingViewController,
             () =>
             {
-                if (generation == _loadingGeneration) RepeatLastSearch();
+                if (generation == _operationGeneration) RepeatLastSearch();
             },
             ViewController.AnimationType.In,
             ViewController.AnimationDirection.Horizontal);
@@ -641,7 +635,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     internal void RetryPostLevelMap()
     {
-        var generation = _loadingGeneration;
+        if (ReturnFromDebugPreview()) return;
         var selection = _postLevelRetrySelection;
         if (selection == null)
         {
@@ -650,23 +644,25 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         }
 
         _postLevelFlowReady = false;
+        var generation = _operationGeneration;
         var loadingViewController = _postLevelLoadingViewController.Value;
         loadingViewController.SetMessage("LOADING LEVEL");
         ReplaceTopViewController(
             loadingViewController,
             () =>
             {
-                if (generation == _loadingGeneration) RetryPostLevelMapAsync(selection);
+                if (generation == _operationGeneration)
+                    RetryPostLevelMapAsync(selection, generation);
             },
             ViewController.AnimationType.In,
             ViewController.AnimationDirection.Horizontal);
     }
 
-    private async void RetryPostLevelMapAsync(EvaluatedDifficulty selection)
+    private async void RetryPostLevelMapAsync(EvaluatedDifficulty selection, int generation)
     {
         var generation = _loadingGeneration;
         if (await PlayMapAsync(selection)) return;
-        if (generation != _loadingGeneration) return;
+        if (generation != _operationGeneration) return;
 
         ShowRankingSelect();
         ShowPopup("RETRY FAILED", "Beat Saber could not reopen the previous roulette map.");
@@ -690,7 +686,11 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     internal void ShowSelect()
     {
-        CancelMapSearch();
+#if BEATLOCATOR_DEBUG_UI
+        _debugPreviewActive = false;
+#endif
+        CancelPendingOperations();
+        HideGameplaySettings();
         _activeRankingSelect = null;
 
         ReplaceTopViewController(
@@ -775,6 +775,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         SongDurationFilter durationFilter,
         int count)
     {
+        var songSpeed = RecommendationGameplaySettings.GetSongSpeed(_playerDataModel);
         RunMapSearchAsync(
             RankingProvider.BeatLeader,
             secretDifficulty,
@@ -787,7 +788,8 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 durationFilter,
                 count,
                 _config,
-                cancellationToken));
+                cancellationToken,
+                songSpeed));
     }
 
     internal void FindScoreSaberMapAsync(
@@ -833,6 +835,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
         _rankingProvider = provider;
         _mapSearchInProgress = true;
+        var generation = _operationGeneration;
         var startedFromPostLevel = _nextSearchFromPostLevel;
         _nextSearchFromPostLevel = false;
         var cancellationSource = new CancellationTokenSource();
@@ -861,6 +864,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 return;
             }
 
+            _selectedMap = searchResult.SelectedDifficulty;
             _rouletteAnimationViewController.Value.SetResult(
                 searchResult.SelectedDifficulty,
                 secretDifficulty);
@@ -931,7 +935,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 // usable destination first, then present the failure dialog.
                 ShowRankingSelect(() =>
                 {
-                    if (failurePopup.HasValue)
+                    if (generation == _operationGeneration && failurePopup.HasValue)
                     {
                         ShowPopup(failurePopup.Value);
                     }
@@ -947,40 +951,76 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
     private void CancelMapSearch()
     {
         var source = _mapSearchCancellationSource;
+        if (source == null) return;
         _mapSearchCancellationSource = null;
+        source.Cancel();
         _mapSearchInProgress = false;
-        source?.Cancel();
-        _beatLeaderSelect.Value.SetSearchInProgress(false);
-        _scoreSaberSelect.Value.SetSearchInProgress(false);
-        _beatSaverSelect.Value.SetSearchInProgress(false);
+        if (_rankingProvider == RankingProvider.ScoreSaber)
+            _scoreSaberSelect.Value.SetSearchInProgress(false);
+        else
+            _beatLeaderSelect.Value.SetSearchInProgress(false);
     }
 
-    internal void CancelLoading()
+    private void CancelPendingOperations()
     {
-        // Invalidate UI continuations before signaling cooperative cancellation.
-        _loadingGeneration++;
+        _operationGeneration++;
         CancelMapSearch();
         var downloadSource = _mapDownloadCancellationSource;
         _mapDownloadCancellationSource = null;
         _mapDownloadInProgress = false;
         downloadSource?.Cancel();
-        if (_loadingPpRunId != 0)
-        {
-            PostLevelUiState.Instance?.Abandon(_loadingPpRunId);
-            _loadingPpRunId = 0;
-        }
-        _playSessionManager.CancelCurrent();
-        _pendingPostLevelResult = null;
-        _postLevelFlowReady = false;
-        _postLevelPresentationInProgress = false;
-        _nextSearchFromPostLevel = false;
+        var levelSource = _levelOpenCancellationSource;
+        _levelOpenCancellationSource = null;
+        levelSource?.Cancel();
         _launchPromptDetectionActive = false;
         FadeBackInAfterLaunchFailure();
-        Plugin.Log.Info("[Flow] Loading canceled; returning to search settings.");
-        if (_activeRankingSelect == null || topViewController != _activeRankingSelect)
+        _playSessionManager.CancelCurrent();
+        PostLevelUiState.Instance?.CancelPending();
+        _pendingPostLevelResult = null;
+        _postLevelFlowReady = false;
+        _postLevelCanceled = true;
+        _nextSearchFromPostLevel = false;
+    }
+
+    internal void CancelLoading()
+    {
+        if (ReturnFromDebugPreview()) return;
+        if (_mainFlowSwitchInProgress || isInTransition) return;
+        if (_activeRankingSelect?.isActivated == true)
         {
-            ShowRankingSelect();
+            CancelPendingOperations();
+            return;
         }
+        ShowRankingSelect();
+    }
+
+    internal static bool IsGameplaySettingsVisible =>
+        _activeInstance != null &&
+        _activeInstance._gameplaySettingsVisible &&
+        ReferenceEquals(_activeInstance._mainFlowCoordinator.childFlowCoordinator, _activeInstance);
+
+    internal void ToggleGameplaySettings()
+    {
+        if (_mainFlowSwitchInProgress || isInTransition) return;
+        if (_gameplaySettingsVisible)
+        {
+            HideGameplaySettings();
+            return;
+        }
+
+        _gameplaySetupViewController.Setup(
+            true, true, true, false,
+            PlayerSettingsPanelController.PlayerSettingsPanelLayout.Singleplayer);
+        _gameplaySettingsVisible = true;
+        SetLeftScreenViewController(_gameplaySetupViewController, ViewController.AnimationType.In);
+    }
+
+    private void HideGameplaySettings(
+        ViewController.AnimationType animationType = ViewController.AnimationType.Out)
+    {
+        if (!_gameplaySettingsVisible) return;
+        SetLeftScreenViewController(null, animationType);
+        _gameplaySettingsVisible = false;
     }
 
     internal void ShowPopup(
@@ -1032,19 +1072,25 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         internal string ButtonText { get; }
     }
 
-    internal async Task<MapDownloadOutcome> DownloadMapAsync(EvaluatedDifficulty selectedDifficulty)
+    internal async Task<MapDownloadOutcome> DownloadMapAsync(
+        EvaluatedDifficulty selectedDifficulty,
+        CancellationToken cancellationToken = default)
     {
+        if (ReturnFromDebugPreview()) return MapDownloadOutcome.Canceled;
         if (_mapDownloadInProgress)
         {
             throw new InvalidOperationException("A BeatLocator map download is already in progress.");
         }
 
         _mapDownloadInProgress = true;
-        using var cancellationSource =
-            new CancellationTokenSource(MapDownloadTimeoutMilliseconds);
-        _mapDownloadCancellationSource = cancellationSource;
+        using var userSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _mapDownloadCancellationSource = userSource;
         try
         {
+            using var timeoutSource =
+                new CancellationTokenSource(MapDownloadTimeoutMilliseconds);
+            using var cancellationSource = CancellationTokenSource.CreateLinkedTokenSource(
+                userSource.Token, timeoutSource.Token);
             var downloaded = await BetterSongSearchDownloadManager.DownloadMapAsync(
                 selectedDifficulty.Map,
                 cancellationSource.Token);
@@ -1054,8 +1100,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 ? MapDownloadOutcome.Installed
                 : MapDownloadOutcome.AlreadyInstalled;
         }
-        catch (OperationCanceledException) when (
-            !ReferenceEquals(_mapDownloadCancellationSource, cancellationSource))
+        catch (OperationCanceledException) when (userSource.IsCancellationRequested)
         {
             Plugin.Log.Info("[Flow] Map download canceled by the player.");
             return MapDownloadOutcome.Canceled;
@@ -1072,7 +1117,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         }
         finally
         {
-            if (ReferenceEquals(_mapDownloadCancellationSource, cancellationSource))
+            if (ReferenceEquals(_mapDownloadCancellationSource, userSource))
             {
                 _mapDownloadCancellationSource = null;
                 _mapDownloadInProgress = false;
@@ -1082,6 +1127,9 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     internal bool IsMapInstalled(EvaluatedDifficulty selectedDifficulty)
     {
+#if BEATLOCATOR_DEBUG_UI
+        if (_debugPreviewActive) return true;
+#endif
         try
         {
             return BetterSongSearchDownloadManager.IsMapInstalled(selectedDifficulty.Map);
@@ -1096,11 +1144,15 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     internal async Task<bool> PlayMapAsync(EvaluatedDifficulty selectedDifficulty)
     {
-        var generation = _loadingGeneration;
+        if (ReturnFromDebugPreview()) return false;
+        if (_levelOpenCancellationSource != null || _mainFlowSwitchInProgress) return false;
+        using var cancellationSource = new CancellationTokenSource();
+        _levelOpenCancellationSource = cancellationSource;
+        var generation = _operationGeneration;
         try
         {
-            var resolvedLevel = await BeatSaberLevelLauncher.ResolveAsync(selectedDifficulty);
-            if (generation != _loadingGeneration) return false;
+            var resolvedLevel = await BeatSaberLevelLauncher.ResolveAsync(
+                selectedDifficulty, cancellationSource.Token);
             var key = resolvedLevel.Key;
             var state = new LevelSelectionFlowCoordinator.State(
                 SelectLevelCategoryViewController.LevelCategory.All,
@@ -1108,19 +1160,26 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 in key,
                 resolvedLevel.Level);
 
-            await FadeOutBeforeSoloFlowAsync(resolvedLevel);
-            if (generation != _loadingGeneration) return false;
+            await FadeOutBeforeSoloFlowAsync(resolvedLevel, cancellationSource.Token);
+            cancellationSource.Token.ThrowIfCancellationRequested();
+            // Solo will activate this same native panel. Finish removal before
+            // replacing the flow so two left-screen transitions cannot overlap.
+            HideGameplaySettings(ViewController.AnimationType.None);
             _soloFreePlayFlowCoordinator.Setup(state);
             var switched = await StopRouletteAndPresentSoloFlowAsync(
                 resolvedLevel,
                 selectedDifficulty,
                 generation);
-            if (generation != _loadingGeneration) return false;
             if (!switched)
             {
                 FadeBackInAfterLaunchFailure();
             }
             return switched;
+        }
+        catch (OperationCanceledException)
+        {
+            if (generation == _operationGeneration) FadeBackInAfterLaunchFailure();
+            return false;
         }
         catch (Exception exception)
         {
@@ -1128,6 +1187,70 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
             FadeBackInAfterLaunchFailure();
             Plugin.Log.Error($"Could not start the selected Beat Saber level: {exception}");
             return false;
+        }
+        finally
+        {
+            if (ReferenceEquals(_levelOpenCancellationSource, cancellationSource))
+                _levelOpenCancellationSource = null;
+        }
+    }
+
+    internal async Task<bool> OpenInSoloAsync(EvaluatedDifficulty? selection = null)
+    {
+        if (ReturnFromDebugPreview()) return false;
+        selection ??= _selectedMap ?? _playSessionManager.LastSelection;
+        if (_levelOpenCancellationSource != null || _mainFlowSwitchInProgress) return false;
+        CancelPendingOperations();
+        using var source = new CancellationTokenSource();
+        _levelOpenCancellationSource = source;
+        try
+        {
+            BeatSaberLevelLauncher.ResolvedLevel? resolved = null;
+            if (selection != null)
+            {
+                var outcome = await DownloadMapAsync(selection, source.Token);
+                source.Token.ThrowIfCancellationRequested();
+                if (outcome != MapDownloadOutcome.Installed &&
+                    outcome != MapDownloadOutcome.AlreadyInstalled)
+                    throw new InvalidOperationException("The selected map could not be downloaded.");
+                resolved = await BeatSaberLevelLauncher.ResolveAsync(selection, source.Token);
+                var key = resolved.Key;
+                _soloFreePlayFlowCoordinator.Setup(new LevelSelectionFlowCoordinator.State(
+                    SelectLevelCategoryViewController.LevelCategory.All,
+                    SongCore.Loader.CustomLevelsPack, in key, resolved.Level));
+            }
+            source.Token.ThrowIfCancellationRequested();
+            HideGameplaySettings(ViewController.AnimationType.None);
+            Task selectionTask = Task.CompletedTask;
+            var switched = await SwitchMainChildFlowAsync(
+                this, _soloFreePlayFlowCoordinator,
+                () =>
+                {
+                    if (resolved != null)
+                        selectionTask = BeatSaberLevelLauncher.SelectDifficultyAsync(
+                            _soloFreePlayFlowCoordinator, resolved, source.Token);
+                },
+                "open map in Solo");
+            if (!switched) return false;
+            await selectionTask;
+            Plugin.Log.Info("[Flow] Opened Solo without launching a roulette session.");
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+        catch (Exception exception)
+        {
+            Plugin.Log.Error($"[Flow] Could not open Solo: {exception}");
+            if (ReferenceEquals(_mainFlowCoordinator.childFlowCoordinator, this))
+                ShowPopup("SOLO UNAVAILABLE", exception.Message);
+            return false;
+        }
+        finally
+        {
+            if (ReferenceEquals(_levelOpenCancellationSource, source))
+                _levelOpenCancellationSource = null;
         }
     }
 
@@ -1337,11 +1460,12 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         var sessionArmed = false;
         try
         {
-            if (generation != _loadingGeneration) return;
+            if (generation != _operationGeneration) return;
             await BeatSaberLevelLauncher.SelectDifficultyAsync(
                 _soloFreePlayFlowCoordinator,
                 resolvedLevel);
-            if (generation != _loadingGeneration) return;
+            if (generation != _operationGeneration) return;
+            _postLevelCanceled = false;
             _playSessionManager.Begin(
                 _rankingProvider,
                 selectedDifficulty,
@@ -1352,7 +1476,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         }
         catch (Exception exception)
         {
-            if (generation != _loadingGeneration) return;
+            if (generation != _operationGeneration) return;
             _launchPromptDetectionActive = false;
             if (sessionArmed)
             {
@@ -1406,13 +1530,14 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
         instance._launchFadeActive = false;
     }
 
-    private Task FadeOutBeforeSoloFlowAsync(
-        BeatSaberLevelLauncher.ResolvedLevel resolvedLevel)
+    private async Task FadeOutBeforeSoloFlowAsync(
+        BeatSaberLevelLauncher.ResolvedLevel resolvedLevel,
+        CancellationToken cancellationToken)
     {
         _launchPromptDetectionActive = false;
         if (_fadeInOutController == null || RequiresMovementPrompt(resolvedLevel.Key))
         {
-            return Task.CompletedTask;
+            return;
         }
 
         var fadeOutMethod = _fadeInOutController.GetType().GetMethod(
@@ -1425,6 +1550,8 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 _fadeInOutController.GetType().Name,
                 "FadeOut(float, Action)");
         var completionSource = new TaskCompletionSource<bool>();
+        using var registration = cancellationToken.Register(
+            () => completionSource.TrySetCanceled());
         _launchFadeActive = true;
         fadeOutMethod.Invoke(
             _fadeInOutController,
@@ -1433,7 +1560,7 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
                 LaunchFadeDurationSeconds,
                 new Action(() => completionSource.TrySetResult(true))
             });
-        return completionSource.Task;
+        await completionSource.Task;
     }
 
     private void FadeBackInAfterLaunchFailure()
@@ -1471,6 +1598,11 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     internal async void Exit()
     {
+#if BEATLOCATOR_DEBUG_UI
+        _debugPreviewActive = false;
+#endif
+        CancelPendingOperations();
+        HideGameplaySettings(ViewController.AnimationType.None);
         await SwitchMainChildFlowAsync(
             this,
             null,
@@ -1568,6 +1700,20 @@ internal sealed class BeatLocatorFlowCoordinator : FlowCoordinator
 
     protected override void BackButtonWasPressed(ViewController topViewController)
     {
+        if (_mainFlowSwitchInProgress) return;
+        if (_gameplaySettingsVisible)
+        {
+            HideGameplaySettings();
+            return;
+        }
+        if (ReturnFromDebugPreview()) return;
+#if BEATLOCATOR_DEBUG_UI
+        if (topViewController is DebugUiViewController)
+        {
+            ShowSelect();
+            return;
+        }
+#endif
         if (_activeRankingSelect != null &&
             topViewController == _activeRankingSelect)
         {

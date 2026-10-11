@@ -13,21 +13,31 @@
           preferred-width="92"
           preferred-height="12" />
     <horizontal id="button-row"
-                horizontal-fit="PreferredSize"
-                vertical-fit="PreferredSize"
+                preferred-width="92" preferred-height="8"
+                child-control-width="true" child-control-height="true"
+                child-expand-width="false" child-expand-height="false"
                 child-align="MiddleCenter"
                 spacing="2">
+        <button text="" on-click="gameplay-settings"
+                hover-hint="Settings &amp; modifiers"
+                preferred-width="8" preferred-height="8" flexible-width="0">
+            <image src="#SettingsIcon" ignore-layout="true" preserve-aspect="true"
+                   anchor-min="0.5 0.5" anchor-max="0.5 0.5"
+                   anchored-position="0 0" size-delta="3.5 3.5" raycast-target="false" />
+        </button>
         <button text="MENU"
                 on-click="menu"
-                preferred-width="27"
+                preferred-width="19" flexible-width="0" font-size="3.4"
                 preferred-height="8" />
         <button text="RETRY"
                 on-click="retry"
-                preferred-width="27"
+                preferred-width="19" flexible-width="0" font-size="3.4"
                 preferred-height="8" />
+        <button text="OPEN" on-click="solo" hover-hint="Open this map in Solo"
+                preferred-width="19" preferred-height="8" flexible-width="0" font-size="3.4" />
         <action-button text="SKIP"
                        on-click="skip"
-                       preferred-width="27"
+                       preferred-width="19" flexible-width="0" font-size="3.4"
                        preferred-height="8" />
     </horizontal>
 </vertical>

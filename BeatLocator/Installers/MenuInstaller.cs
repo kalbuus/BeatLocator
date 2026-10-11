@@ -32,6 +32,11 @@ internal class MenuInstaller : Installer
         Container.Bind<SelectViewController>()
             .FromNewComponentAsViewController()
             .AsSingle();
+#if BEATLOCATOR_DEBUG_UI
+        Container.Bind<DebugUiViewController>()
+            .FromNewComponentAsViewController()
+            .AsSingle();
+#endif
 
         // All BeatLocator view controllers stay lazy through LazyInject in the flow
         // coordinator. Startup registers only the menu entry and lightweight flow;

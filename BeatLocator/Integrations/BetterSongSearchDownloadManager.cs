@@ -26,6 +26,7 @@ internal static class BetterSongSearchDownloadManager
         RecommendationMap map,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var hash = GetMapHash(map);
         if (IsMapHashInstalled(hash))
         {
@@ -73,6 +74,7 @@ internal static class BetterSongSearchDownloadManager
         }
 
         await downloadTask;
+        cancellationToken.ThrowIfCancellationRequested();
         await RefreshSongCoreAsync(cancellationToken);
         return true;
     }

@@ -380,7 +380,36 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
             index,
             DurationsList.Count);
         _preferences.DurationSelection = (SongDurationFilter)_selectedDuration;
+<<<<<<< ours
         ApplySelection(_durationVisuals, _selectedDuration);
+=======
+        _durationSelectionSlider?.MoveTo(_selectedDuration);
+    }
+
+    [UIAction("find-btn-action")]
+    private void OnFindPressed()
+    {
+        if (_searchInProgress)
+        {
+            _flowCoordinator.CancelLoading();
+            return;
+        }
+        SetSearchInProgress(true);
+        _flowCoordinator.FindBeatLeaderMapAsync(
+            _playedEnabled,
+            RankingSelectViewSupport.StarBuffer,
+            _twoSaberEnabled,
+            _secretEnabled,
+            _selectedBalance,
+            _selectedDifficulty,
+            (SongDurationFilter)_selectedDuration,
+            RankingSelectViewSupport.MapCount);
+    }
+
+    internal void RepeatLastSearch()
+    {
+        OnFindPressed();
+>>>>>>> theirs
     }
 
     [UIAction("togglePlayed")]
@@ -474,6 +503,7 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
         bool addedToHierarchy,
         bool screenSystemEnabling)
     {
+<<<<<<< ours
         base.DidActivate(
             firstActivation && !_visualsInitialized,
             addedToHierarchy,
@@ -490,6 +520,11 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
         {
             ApplyBotSpeechVisibility(false);
         }
+=======
+        base.DidActivate(firstActivation, addedToHierarchy, screenSystemEnabling);
+        SyncDurationSelection();
+        _findButton.interactable = true;
+>>>>>>> theirs
         ForceMenuLayoutRebuild();
         StartCoroutine(RebuildMenuLayoutNextFrame());
     }
@@ -529,6 +564,7 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
     internal void SetSearchInProgress(bool searchInProgress)
     {
         _searchInProgress = searchInProgress;
+<<<<<<< ours
         NotifyPropertyChanged(nameof(SearchInProgress));
         if (_findButton)
         {
@@ -864,12 +900,31 @@ public sealed class BeatLeaderSelect : BSMLAutomaticViewController
             button.onClick.AddListener(
                 () => selectionChanged(buttonIndex));
             visuals[index] = visual;
+=======
+        FindButtonText = searchInProgress
+            ? "<b>CANCEL SEARCH</b>"
+            : "<b>FIND SOME MAPS!</b>";
+        NotifyPropertyChanged(nameof(FindButtonText));
+        if (_findButton != null)
+        {
+            _findButton.interactable = true;
+>>>>>>> theirs
         }
 
         return visuals;
     }
 
+<<<<<<< ours
     private static ModifierButtonVisual InitializeModifier(
+=======
+    [UIAction("gameplay-settings")]
+    private void GameplaySettingsPressed()
+    {
+        _flowCoordinator.ToggleGameplaySettings();
+    }
+
+    private ToggleButtonVisual CreateToggleVisual(
+>>>>>>> theirs
         Button button,
         Image icon,
         TMP_Text title,

@@ -68,6 +68,13 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     private Button _skipButton = null!;
     [UIComponent("primary-button")]
     private Button _primaryButton = null!;
+    [UIComponent("solo-button")]
+    private Button _soloButton = null!;
+    private CanvasGroup _soloButtonCanvasGroup = null!;
+    [UIComponent("gameplay-settings-button")]
+    private Button _gameplaySettingsButton = null!;
+    [UIValue("soloButtonText")]
+    public string SoloButtonText { get; private set; } = "OPEN";
 
     [UIValue("statusText")]
     public string StatusText { get; private set; } = "Preparing roulette...";
@@ -197,6 +204,12 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         _primaryButtonState = mapInstalled
             ? PrimaryButtonState.Play
             : PrimaryButtonState.Download;
+        SoloButtonText = "OPEN";
+        NotifyPropertyChanged(nameof(SoloButtonText));
+        if (_soloButton != null)
+        {
+            HideOpenButtonForReveal();
+        }
 
         NotifyPropertyChanged(nameof(SongTitleText));
         NotifyPropertyChanged(nameof(SongSubNameText));
@@ -276,25 +289,48 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     [UIAction("menuPressed")]
     private void OnMenuPressed()
     {
-        if (_primaryButtonState == PrimaryButtonState.Downloading ||
-            _primaryButtonState == PrimaryButtonState.Starting)
-        {
-            return;
-        }
-
-        _flowCoordinator.ShowRankingSelect();
+        _flowCoordinator.CancelLoading();
     }
 
     [UIAction("skipPressed")]
     private void OnSkipPressed()
     {
-        if (_primaryButtonState == PrimaryButtonState.Downloading ||
-            _primaryButtonState == PrimaryButtonState.Starting)
+        if (_primaryButtonState == PrimaryButtonState.Starting)
         {
             return;
         }
 
         _flowCoordinator.StartNextRoulette();
+    }
+
+    [UIAction("gameplay-settings")]
+    private void GameplaySettingsPressed()
+    {
+        _flowCoordinator.ToggleGameplaySettings();
+    }
+
+    [UIAction("soloPressed")]
+    private async void SoloPressed()
+    {
+        if (_selectedDifficulty == null ||
+            _primaryButtonState == PrimaryButtonState.Downloading ||
+            _primaryButtonState == PrimaryButtonState.Starting) return;
+        var runId = _runId;
+        _primaryButtonState = PrimaryButtonState.Starting;
+        _primaryButton.interactable = false;
+        _soloButton.interactable = false;
+        SoloButtonText = "...";
+        NotifyPropertyChanged(nameof(SoloButtonText));
+        StopPreviewPlayback();
+        if (!await _flowCoordinator.OpenInSoloAsync(_selectedDifficulty) && runId == _runId)
+        {
+            _primaryButtonState = _flowCoordinator.IsMapInstalled(_selectedDifficulty)
+                ? PrimaryButtonState.Play : PrimaryButtonState.Download;
+            _primaryButton.interactable = true;
+            _soloButton.interactable = true;
+            SoloButtonText = "OPEN";
+            NotifyPropertyChanged(nameof(SoloButtonText));
+        }
     }
 
     [UIAction("primaryPressed")]
@@ -308,6 +344,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
             SetLoadingInProgress(true);
             SetPrimaryButtonText("PLAY");
             _primaryButton.interactable = false;
+            _soloButton.interactable = false;
             _menuButton.interactable = false;
             _skipButton.interactable = false;
             StopPreviewPlayback();
@@ -319,6 +356,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
                 _primaryButtonState = PrimaryButtonState.Play;
                 SetPrimaryButtonText("PLAY");
                 _primaryButton.interactable = true;
+                _soloButton.interactable = true;
                 _menuButton.interactable = true;
                 _skipButton.interactable = true;
             }
@@ -337,12 +375,12 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         SetLoadingInProgress(true);
         SetPrimaryButtonText("PLAY");
         _primaryButton.interactable = false;
-        _menuButton.interactable = false;
-        _skipButton.interactable = false;
+        _soloButton.interactable = false;
         StopPreviewPlayback();
 
         var outcome = await _flowCoordinator.DownloadMapAsync(_selectedDifficulty);
         if (runId != _runId) return;
+        if (outcome == MapDownloadOutcome.Canceled) return;
 
         if (outcome == MapDownloadOutcome.Installed ||
             outcome == MapDownloadOutcome.AlreadyInstalled)
@@ -355,6 +393,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
                 SetLoadingInProgress(false);
                 _primaryButtonState = PrimaryButtonState.Play;
                 _primaryButton.interactable = true;
+                _soloButton.interactable = true;
                 _menuButton.interactable = true;
                 _skipButton.interactable = true;
             }
@@ -365,6 +404,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         SetLoadingInProgress(false);
         SetPrimaryButtonText("PLAY");
         _primaryButton.interactable = true;
+        _soloButton.interactable = true;
         _menuButton.interactable = true;
         _skipButton.interactable = true;
     }
@@ -646,6 +686,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
 
     private void PrepareSongDetails()
     {
+        _soloButtonCanvasGroup = GetOrAddCanvasGroup(_soloButton.gameObject);
         _songDetails.anchorMin = new Vector2(0.5f, 0.5f);
         _songDetails.anchorMax = new Vector2(0.5f, 0.5f);
         _songDetails.pivot = new Vector2(0.5f, 0.5f);
@@ -673,6 +714,8 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         AddSongDetailCanvasGroup(_songActions);
 
         _songDetails.gameObject.SetActive(false);
+        HideOpenButtonForReveal();
+        _gameplaySettingsButton.interactable = false;
     }
 
     private void UpdateDifficultyVisibility()
@@ -681,6 +724,16 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         {
             _songDifficulty.gameObject.SetActive(!_secretDifficulty);
         }
+    }
+
+    private void HideOpenButtonForReveal()
+    {
+        // Reserve its place in the action row while preserving the delayed reveal.
+        _soloButton.gameObject.SetActive(true);
+        _soloButton.interactable = false;
+        _soloButtonCanvasGroup ??= GetOrAddCanvasGroup(_soloButton.gameObject);
+        _soloButtonCanvasGroup.alpha = 0f;
+        _soloButtonCanvasGroup.blocksRaycasts = false;
     }
 
     private void EnforceSongDetailsBounds()
@@ -1175,6 +1228,8 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         _viewportBackground.enabled = true;
         _viewportBackground.color = _viewportBackgroundColor;
         _songDetails.gameObject.SetActive(false);
+        HideOpenButtonForReveal();
+        _gameplaySettingsButton.interactable = false;
         _menuButton.interactable = false;
         _skipButton.interactable = false;
         _primaryButton.interactable = false;
@@ -1333,9 +1388,6 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         _previewHoverHandler.enabled = previewAvailable;
         _previewOverlayCanvasGroup.alpha = 0f;
         _songDetails.gameObject.SetActive(true);
-        _menuButton.interactable = true;
-        _skipButton.interactable = true;
-        _primaryButton.interactable = true;
         Canvas.ForceUpdateCanvases();
         SetLoadingInProgress(false);
         EnforceSongDetailsBounds();
@@ -1567,8 +1619,12 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
 
         var stars = selectedDifficulty.Difficulty.Stars.HasValue
             ? selectedDifficulty.Difficulty.Stars.Value.ToString("0.00")
+        var evaluatedStars = selectedDifficulty.Difficulty.EvaluationStars ?? selectedDifficulty.Difficulty.Stars;
+        var stars = evaluatedStars.HasValue
+            ? evaluatedStars.Value.ToString("0.00")
             : "?";
-        return $"{difficultyLabel}  •  {stars} ★";
+        var speed = selectedDifficulty.Difficulty.EvaluationSpeed;
+        return $"{difficultyLabel}  •  {stars} ★{(speed.Length > 0 ? " (" + speed + ")" : string.Empty)}";
     }
 
     private void SelectCoverUrls(string? fullCoverUrl, string? coverUrl)

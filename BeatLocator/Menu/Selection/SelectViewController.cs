@@ -228,10 +228,25 @@ public class SelectViewController : BSMLAutomaticViewController
         UnityEngine.Application.OpenURL(FeedbackUrl);
     }
 
-    [UIAction("debugCompletedPressed")]
-    private void OnDebugCompletedPressed()
+    [UIValue("debugUiEnabled")]
+    public bool DebugUiEnabled
     {
-        _flowCoordinator.ShowDebugCompletedLevel();
+        get
+        {
+#if BEATLOCATOR_DEBUG_UI
+            return true;
+#else
+            return false;
+#endif
+        }
+    }
+
+    [UIAction("debugUiPressed")]
+    private void OnDebugUiPressed()
+    {
+#if BEATLOCATOR_DEBUG_UI
+        _flowCoordinator.ShowDebugMenu();
+#endif
     }
 
     [UIAction("exitPressed")]

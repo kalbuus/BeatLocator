@@ -1,0 +1,33 @@
+<vertical preferred-width="92" preferred-height="78"
+          child-control-width="true" child-control-height="true"
+          child-expand-width="false" child-expand-height="false"
+          child-align="MiddleCenter" spacing="2">
+    <text text="DEBUG UI" font-size="7" align="Center" preferred-height="9" />
+    <text text="Sample data. Action buttons return here. Gear opens settings."
+          font-size="3" align="Center" preferred-width="92" preferred-height="8" />
+    <horizontal preferred-width="92" preferred-height="8" spacing="2"
+                child-control-width="true" child-control-height="true"
+                child-expand-width="false" child-expand-height="false">
+        <button text="PP RESULT" on-click="pp" preferred-width="45" preferred-height="8" />
+        <button text="NON PB" on-click="non-pb" preferred-width="45" preferred-height="8" />
+    </horizontal>
+    <horizontal preferred-width="92" preferred-height="8" spacing="2"
+                child-control-width="true" child-control-height="true"
+                child-expand-width="false" child-expand-height="false">
+        <button text="LEVEL FAILED" on-click="failed" preferred-width="45" preferred-height="8" />
+        <button text="LEVEL QUIT" on-click="quit" preferred-width="45" preferred-height="8" />
+    </horizontal>
+    <horizontal preferred-width="92" preferred-height="8" spacing="2"
+                child-control-width="true" child-control-height="true"
+                child-expand-width="false" child-expand-height="false">
+        <button text="CALCULATING PP" on-click="loading-pp" preferred-width="45" preferred-height="8" />
+        <button text="FINDING SONG" on-click="loading-song" preferred-width="45" preferred-height="8" />
+    </horizontal>
+    <horizontal preferred-width="92" preferred-height="8" spacing="2"
+                child-control-width="true" child-control-height="true"
+                child-expand-width="false" child-expand-height="false">
+        <button text="UPLOAD FAILED" on-click="upload-failed" preferred-width="45" preferred-height="8" />
+        <button text="ROULETTE" on-click="roulette" preferred-width="45" preferred-height="8" />
+    </horizontal>
+    <button text="BACK" on-click="back" preferred-width="45" preferred-height="8" />
+</vertical>

@@ -245,6 +245,20 @@ internal sealed class PpResultViewController : BSMLAutomaticViewController
         _flowCoordinator.StartNextRoulette();
     }
 
+    [UIAction("solo")]
+    private async void SoloPressed()
+    {
+        SetButtonsVisible(false);
+        if (!await _flowCoordinator.OpenInSoloAsync() && isActivated)
+            SetButtonsVisible(true);
+    }
+
+    [UIAction("gameplay-settings")]
+    private void GameplaySettingsPressed()
+    {
+        _flowCoordinator.ToggleGameplaySettings();
+    }
+
     private static string GetStatusText(PpResolutionOutcome outcome)
     {
         if (outcome == PpResolutionOutcome.LocalCompleted) return "LEVEL COMPLETED";

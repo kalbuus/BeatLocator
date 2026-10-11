@@ -80,6 +80,10 @@ internal sealed class RouletteLevelCompletionTracker : IInitializable, IDisposab
             return;
         }
 
+        // Learn from the actual attempt, including NonPB/failed plays, before an upload can arrive.
+        // Quit and Restart are deliberately not observations of player skill.
+        RecordSkillResult(transition, results, session);
+
         if (results.levelEndAction == LevelCompletionResults.LevelEndAction.Quit ||
             results.levelEndStateType == LevelCompletionResults.LevelEndStateType.Incomplete)
         {
@@ -168,6 +172,23 @@ internal sealed class RouletteLevelCompletionTracker : IInitializable, IDisposab
         finally
         {
             _sessionManager.Release(session.RunId);
+        }
+    }
+
+    private static void RecordSkillResult(StandardLevelScenesTransitionSetupDataSO transition,
+        LevelCompletionResults results, RoulettePlaySession session)
+    {
+        try
+        {
+            if (!LocalSkillObservation.TryRead(transition, results, session.Provider, session.Selection.Difficulty,
+                    out var accuracy, out var speed, out var failed)) return;
+            RecommendationEngine.RecordLocalResult(session.Provider, session.RunId, session.Selection,
+                accuracy, speed, failed, DateTimeOffset.UtcNow);
+        }
+        catch (Exception exception)
+        {
+            // Recommendation learning must never interfere with vanilla results or PP resolution.
+            Plugin.Log.Warn($"[Skill] Run {session.RunId} could not be learned: {exception.Message}");
         }
     }
 

@@ -1,4 +1,7 @@
 # Build outputs
+# Local instructions for debug
+/docs/*.md
+
 [Bb]in/
 [Oo]bj/
 /artifacts/

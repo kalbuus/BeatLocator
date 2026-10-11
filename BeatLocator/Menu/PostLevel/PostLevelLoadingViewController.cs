@@ -2,6 +2,7 @@ using BeatSaberMarkupLanguage.Attributes;
 using BeatSaberMarkupLanguage.ViewControllers;
 using MotionUtils;
 using UnityEngine;
+using UnityEngine.UI;
 using Zenject;
 
 namespace BeatLocator.Menu;
@@ -10,6 +11,8 @@ internal sealed class PostLevelLoadingViewController : BSMLAutomaticViewControll
 {
     [UIComponent("loading-root")]
     private RectTransform _loadingRoot = null!;
+    [UIComponent("cancel-button")]
+    private RectTransform _cancelButton = null!;
 
     [UIValue("loadingText")]
     public string LoadingText { get; private set; } = "CALCULATING PP";
@@ -25,6 +28,21 @@ internal sealed class PostLevelLoadingViewController : BSMLAutomaticViewControll
     private void Construct(BeatLocatorFlowCoordinator flowCoordinator)
     {
         _flowCoordinator = flowCoordinator;
+    }
+
+    [UIAction("#post-parse")]
+    private void ConfigureCancelButton()
+    {
+        // BSML's ButtonTag adds a ContentSizeFitter to the Practice-button
+        // prefab. It can override the requested dimensions after a layout pass.
+        foreach (var fitter in _cancelButton.GetComponents<ContentSizeFitter>())
+            fitter.enabled = false;
+        var element = _cancelButton.GetComponent<LayoutElement>();
+        if (element != null) element.ignoreLayout = true;
+        _cancelButton.anchorMin = _cancelButton.anchorMax = new Vector2(0.5f, 0.5f);
+        _cancelButton.anchoredPosition = new Vector2(0f, -11f);
+        _cancelButton.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, 24f);
+        _cancelButton.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 8f);
     }
 
     [UIAction("cancel")]
@@ -46,6 +64,7 @@ internal sealed class PostLevelLoadingViewController : BSMLAutomaticViewControll
     {
         base.DidActivate(firstActivation, addedToHierarchy, screenSystemEnabling);
         _loadingRoot.gameObject.SetActive(true);
+        ConfigureCancelButton();
         if (!addedToHierarchy && !screenSystemEnabling) return;
 
         _animationId++;

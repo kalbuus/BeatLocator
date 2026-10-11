@@ -397,9 +397,15 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
     {
         if (_searchInProgress)
         {
+<<<<<<< ours
             return;
         }
 
+=======
+            _flowCoordinator.CancelLoading();
+            return;
+        }
+>>>>>>> theirs
         SetSearchInProgress(true);
         _flowCoordinator.FindScoreSaberMapAsync(
             (ScoreSaberPlayedFilter)_selectedPlayedFilter,
@@ -435,6 +441,7 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
         bool addedToHierarchy,
         bool screenSystemEnabling)
     {
+<<<<<<< ours
         base.DidActivate(
             firstActivation && !_visualsInitialized,
             addedToHierarchy,
@@ -452,6 +459,11 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
             ApplyBotSpeechVisibility(false);
         }
 
+=======
+        base.DidActivate(firstActivation, addedToHierarchy, screenSystemEnabling);
+        SyncDurationSelection();
+        _findButton.interactable = true;
+>>>>>>> theirs
         ForceMenuLayoutRebuild();
         StartCoroutine(RebuildMenuLayoutNextFrame());
     }
@@ -497,6 +509,7 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
     internal void SetSearchInProgress(bool searchInProgress)
     {
         _searchInProgress = searchInProgress;
+<<<<<<< ours
         NotifyPropertyChanged(nameof(SearchInProgress));
         if (_findButton)
         {
@@ -510,6 +523,28 @@ public sealed class ScoreSaberSelect : BSMLAutomaticViewController
 
     [UIAction("cancel-loading")]
     private void CancelLoadingPressed()
+=======
+        FindButtonText = searchInProgress
+            ? "<b>CANCEL SEARCH</b>"
+            : "<b>FIND SOME MAPS!</b>";
+        NotifyPropertyChanged(nameof(FindButtonText));
+        if (_findButton != null)
+        {
+            _findButton.interactable = true;
+        }
+    }
+
+    [UIAction("gameplay-settings")]
+    private void GameplaySettingsPressed()
+    {
+        _flowCoordinator.ToggleGameplaySettings();
+    }
+
+    private ToggleButtonVisual CreateToggleVisual(
+        Button button,
+        TMP_Text label,
+        bool active)
+>>>>>>> theirs
     {
         _flowCoordinator.CancelLoading();
     }
