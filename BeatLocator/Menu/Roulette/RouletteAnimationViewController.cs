@@ -853,7 +853,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     {
         using var downloadHandler = new DownloadHandlerTexture();
         using var request = UnityWebRequest.Get(coverUrl);
-        request.SetRequestHeader("User-Agent", "BeatLocator/0.1.0");
+        request.SetRequestHeader("User-Agent", Plugin.UserAgent);
         request.timeout = CoverRequestTimeoutSeconds;
         request.downloadHandler = downloadHandler;
         request.disposeDownloadHandlerOnDispose = false;
@@ -1395,7 +1395,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
                          ?? throw new InvalidOperationException(
                              "The ranking service did not provide a valid map hash for preview playback.");
         using var request = UnityWebRequestMultimedia.GetAudioClip(previewUrl, AudioType.MPEG);
-        request.SetRequestHeader("User-Agent", "BeatLocator/0.1.0");
+        request.SetRequestHeader("User-Agent", Plugin.UserAgent);
         var operation = request.SendWebRequest();
 
         while (!operation.isDone)

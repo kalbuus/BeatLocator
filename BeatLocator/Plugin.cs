@@ -19,6 +19,8 @@ internal class Plugin
     private const string HarmonyId = "com.kalbuus.beatlocator";
 
     internal static IpaLogger Log { get; private set; } = null!;
+    internal static string UserAgent { get; } =
+        $"BeatLocator/{typeof(Plugin).Assembly.GetName().Version.ToString(3)}";
 
     // Methods with [Init] are called when the plugin is first loaded by IPA.
     // All the parameters are provided by IPA and are optional.

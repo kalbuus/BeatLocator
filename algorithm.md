@@ -1,6 +1,6 @@
 # BeatLocator Recommendation Algorithm
 
-This document describes how BeatLocator currently turns a player's ranked score history into a single map and difficulty recommendation. It covers the recommendation engine only. Map download, launch, roulette presentation, and post-level PP tracking are separate systems.
+This document describes how BeatLocator v0.1.1 turns a player's ranked score history into a single map and difficulty recommendation. It covers BeatLeader and ScoreSaber. Map download, launch, roulette presentation, and post-level PP tracking are separate systems.
 
 The shared implementation lives in
 [`RecommendationEngine`](BeatLocator/EvaluationManagers/RecommendationEngine.cs).
@@ -17,7 +17,7 @@ For each ranking provider, BeatLocator:
 1. Loads bounded recent and top ranked results, with a short provider cache.
 2. Builds a player-specific relationship between map stars and achieved accuracy.
 3. Converts that model into five difficulty targets.
-4. Requests ranked candidates around the selected target.
+4. Requests ranked candidates around the selected target, or samples a challenge catalogue for BeatLeader `END ME`.
 5. Applies provider and user filters.
 6. Scores every eligible map difficulty.
 7. Selects one difficulty using weighted random selection.
@@ -30,10 +30,7 @@ it does not perform another random selection.
 
 The pure estimator lives in
 [`PlayerSkillEstimator`](BeatLocator/EvaluationManagers/PlayerSkillEstimator.cs).
-Its formulas, normalization rules, live updates and runtime checks are detailed in
-[`stable-skill-recommendations.md`](docs/stable-skill-recommendations.md).
-
-BeatLeader loads 100 recent and 100 top-PP ranked scores, deduplicated by score ID.
+BeatLeader loads up to 100 recent and 100 top-PP ranked scores, deduplicated by score ID.
 ScoreSaber scans up to three recent pages and, when more history exists, up to
 three top pages, retaining ranked CLEAR results. Original score timestamps are
 preserved. Provider caches expire after two minutes and are isolated by player.
@@ -43,54 +40,94 @@ from `difficulty.modifiersRating`, together with raw accuracy. Unsupported modif
 and missing speed ratings are excluded. Candidates also account for the active
 BeatLeader speed setting, using actual API ratings for local eligibility checks.
 
-Recency weights multiply decay in elapsed days and number of newer observations:
+### History and accuracy normalization
+
+The estimator retains up to 240 timestamped observations, ordered newest first.
+Failed attempts, unsupported modifiers and invalid ratings or accuracy values
+are excluded. A play must have a usable star rating and accuracy above zero and
+at most one. Speed-modified results require the corresponding actual ratings;
+the model does not approximate them using a PP multiplier.
+
+Recency weights multiply decay in elapsed days behind the newest observation
+and number of newer observations:
 
 ```text
 weight = 0.5 ^ (daysBehindNewest / 45) * 0.5 ^ (sortedIndex / 60)
 ```
 
-Weights below 0.001 are discarded. A bounded, regularized negative accuracy
-slope translates each play into capability at a player-specific reference accuracy (80-90%).
-Sparse, flat or positive-slope profiles use a conservative fallback slope, so
-one valid ranked result is sufficient. Ordinary difficulty uses a weighted history
-mean, allowing at most 0.75 stars of positive accuracy reserve per result. Hard
-challenges and component budgets use up to 60 comparable results. Fitted slope
-influence is limited to 35%; a short session does not erase established skill.
+Weights below 0.001 are discarded. There is no fixed skill penalty simply for
+not playing for 30 days. Older evidence loses influence relative to newer plays.
+
+Reference accuracy is the recency-weighted mean accuracy plus two percentage
+points, clamped to 80-90%. The model fits a negative slope between stars and
+logit accuracy, using `logit(a) = ln(a / (1 - a))`. Accuracy is clamped to
+0.01-0.9995 for this calculation.
+
+The default slope is -0.35. Fitting requires at least five comparable results
+and enough star variance. Flat, positive or otherwise unusable slopes use the
+default. Otherwise, fitted influence is `min(0.35, sampleCount / 100)` and the
+regularized slope is clamped to -0.8 through -0.15.
+
+Each result estimates capability at reference accuracy:
+
+```text
+reserve = (logit(accuracy) - logit(referenceAccuracy)) / -slope
+reserve = clamp(reserve, -min(4, stars * 0.65), min(2.5, stars * 0.45))
+capability = clamp(stars + reserve, 0.1, 25)
+```
+
+Ordinary difficulty uses a recency-weighted mean of
+`stars + min(0.75, capability - stars)`. This limits inferred positive accuracy
+reserve to 0.75 stars per result and describes the player's usual range rather
+than an upper percentile of their best plays. The center is then capped at the
+demonstrated challenge boundary described below.
+
+Hard-challenge and component evidence uses up to 60 comparable results. Easy
+practice has reduced influence on this evidence: its weight is multiplied by
+`max(0.01, min(1, stars / anchor) ^ 3)`, where `anchor` is the weighted 90th
+percentile of demonstrated stars. Ordinary difficulty keeps the original
+recency weights. One valid comparable result is sufficient for a fallback profile.
 
 ## Difficulty Presets
 
-SUPER EASY/EASY/OKAY/A BIT HARD use player-specific accuracy anchors around the
-ordinary history center. Reference accuracy is the weighted history mean plus
-two percentage points, bounded to 80-90%.
-Comfort and A BIT HARD are bounded by recent hard-clear evidence.
-END ME uses a separate recent challenge boundary, with only a small accuracy
-reserve and a bounded step for Barely Possible/Actually Impossible. It does not
-extrapolate toward 80%/70% accuracy.
+The first four presets use accuracy anchors around the ordinary history center:
 
-BeatLeader END ME selects from sampled real candidates, accounting for component
-suitability and user filters. Catalogue saturation adjusts selection without
-changing estimated skill. Both modes may converge when the available challenge
-pool is tiny. See [experimental-challenge-model.md](docs/experimental-challenge-model.md)
-for formulas, sampling limits, offline results and runtime validation needs.
-ScoreSaber still uses its bounded star-window search.
+| Preset | Accuracy anchor |
+|---|---|
+| `SUPER EASY` | Reference + 7 percentage points, at most 97% |
+| `EASY` | Reference + 4 percentage points, at most 94% |
+| `OKAY` | Reference accuracy |
+| `A BIT HARD` | Reference - 5 percentage points |
 
-Component budgets constrain unsupported acc/pass/tech challenges in BeatLeader.
-Shared stars and sparse-profile fallbacks remain separate for each provider.
+The star offset is `(logit(anchor) - logit(referenceAccuracy)) / slope`.
+For `SUPER EASY`, its magnitude is limited to `min(3, max(0.12, center * 0.5))`.
+The other ordinary presets use `min(1.75, max(0.12, center * 0.25))`.
+`A BIT HARD` is also capped near demonstrated hard-clear capability.
+All final targets are clamped to 0.1-25 stars.
 
-## Immediate Updates
+`END ME` uses a separate weighted 85th-percentile boundary from recent comparable
+clears with at least 70% accuracy. Each clear may contribute a positive accuracy
+reserve of at most `min(0.75, stars * 0.15)`. With no qualifying hard clears, the
+boundary falls back to the ordinary center. `END ME` starts at the greater of
+the center and this boundary; it does not extrapolate a regression toward 80%
+or 70% accuracy.
 
-Completed roulette clears are appended to result history before PP upload,
-including NonPB clears. The same estimator recalculates the accumulated history,
-without separate per-play form adjustments. Failed attempts, Quit, Restart,
-practice, invalidation and unsupported modifiers are excluded.
+`Barely Possible` adds `min(0.75, max(0.06, boundary * 0.1))` stars.
+`Actually Impossible` starts with `min(1.5, max(0.06, boundary * 0.2))` and applies
+an additional proportional stretch for boundaries below eight stars:
 
-Local observations survive API refresh without double-counting an uploaded PB.
-They are kept in memory for the current process. Immediate learning currently
-covers roulette attempts; other provider PBs arrive on the next profile refresh.
+```text
+stretch = 0.2 + 0.2 * clamp((8 - boundary) / 3, 0, 1)
+step = max(step, min(1.5, boundary * 0.2) + boundary * (stretch - 0.2))
+```
+
+BeatLeader selects `END ME` from sampled real candidates as described below.
+ScoreSaber uses the same target estimator with its bounded star-window search.
+Profiles and sparse-history fallbacks remain separate for each provider.
 
 ## Candidate Search
 
-Every search begins at the selected target with a requested `+-0.5` star window, reduced for weak players. If the provider returns maps but no eligible difficulty can be selected, the shared engine expands the window in 0.5-star steps:
+The first four BeatLeader presets and all ScoreSaber presets begin at the selected target with a requested `+-0.5` star window, reduced for weak players. If the provider returns maps but no eligible difficulty can be selected, the shared engine expands the window in 0.5-star steps:
 
 ```text
 +-0.5 -> +-1.0 -> +-1.5 -> +-2.0
@@ -102,11 +139,36 @@ The search expands at most `min(2, max(0.15, target * 0.3))` stars from the calc
 
 BeatLeader filters ranked maps by the current star range, played state, mode, and duration through its maps API. For a given filter query, BeatLocator keeps a page cursor and can inspect up to two provider pages at each star window when the first page has no selectable candidate.
 
-The provider sort changes with the selected difficulty preset:
+For ordinary presets, the provider sort changes with the selected difficulty:
 
 - `SUPER EASY`: stars ascending;
-- `END ME`: stars descending;
 - middle presets: play count descending.
+
+### BeatLeader END ME Catalogue
+
+`END ME` samples up to two pages sorted by descending stars. Its effective-star
+range starts at the ordinary history center and ends at
+`desiredTarget + min(2, max(0.15, desiredTarget * 0.3))`, capped at 25 stars.
+Duration, played state, characteristic, style, active speed, component
+suitability and session history still restrict eligibility. This is a bounded
+sample, not a scan of every ranked map.
+
+If the desired target exceeds the eligible sample's ceiling, `Actually Impossible`
+targets that ceiling. `Barely Possible` uses the candidate at index
+`floor((candidateCount - 1) * 0.8)` in star order. A very small pool can make the
+two settings converge. These catalogue adjustments do not lower stored skill.
+
+The target is then snapped to the nearest eligible star value. Only candidates
+within half of `bandwidth = min(0.35, max(0.06, target * 0.04))` participate.
+Their style/component weights receive an additional proximity factor:
+
+```text
+challengeWeight = candidateWeight / (1 + abs(candidateStars - target) / bandwidth)
+```
+
+Component suitability is evaluated at each candidate's actual effective stars.
+The engine returns an error if the challenge pool is empty instead of silently
+falling back to an easy map.
 
 ### ScoreSaber Candidate Sampling
 
@@ -190,8 +252,25 @@ For a style value `s`, the five balance presets use these weights:
 If the style weight is zero, the difficulty is excluded. Otherwise:
 
 ```text
-BeatLeaderWeight = 0.6 * styleWeight + 0.4 * difficultyScore
+BeatLeaderWeight = (0.6 * styleWeight + 0.4 * difficultyScore) * profileSuitability
 ```
+
+### BeatLeader Component Suitability
+
+Acc, pass and tech budgets are weighted means of the corresponding ratings from
+up to 60 comparable results. Each observed rating is scaled by
+`clamp(capability / stars, 0.6, 1.3)`. A component needs at least three usable
+observations; otherwise that component does not restrict candidates.
+
+For a candidate, `scale = max(0.5, targetStars / center)` and each component ratio
+is `candidateRating / (componentBudget * scale)`. Suitability starts at 1:
+
+- Any known component ratio above 1.6 rejects the candidate.
+- Pass and tech ratios above 1.1 multiply suitability by `(1.6 - ratio) / 0.5`.
+- Acc ratios above 1.15 multiply suitability by `(1.6 - ratio) / 0.45`.
+
+This reduces the chance that a strong accuracy profile receives an unsupported
+pass or tech challenge merely because the overall star rating is close enough.
 
 ### ScoreSaber Score
 

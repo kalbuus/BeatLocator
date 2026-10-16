@@ -1030,7 +1030,7 @@ internal static class SSWebUtil
     private static HttpClient CreateHttpClient()
     {
         var client = new HttpClient();
-        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BeatLocator/0.1.0");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", Plugin.UserAgent);
         client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "application/json");
         return client;
     }

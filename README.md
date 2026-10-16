@@ -77,9 +77,11 @@ Currently, support for versions 1.42+ or standalone is not planned.
 
 ## Recommendation Engine
 
-BeatLocator analyzes up to 100 ranked results to build a player-specific difficulty range. It filters available ranked maps using the selected settings and makes a weighted recommendation near the chosen difficulty target. 
+BeatLocator combines recent and top ranked results to estimate your usual difficulty range. The model uses achieved accuracy and gives newer results more weight, while limiting how much an isolated strong result can raise ordinary recommendations.
 
-BeatLeader recommendations also account for the selected Tech/Pass balance, while ScoreSaber recommendations use overall star difficulty.
+The first four difficulty presets follow this usual range. `END ME` uses a separate boundary based on demonstrated hard clears. BeatLeader selects challenges from sampled eligible maps, so the result also depends on the available catalogue and your filters.
+
+BeatLeader recommendations account for the selected Tech/Pass balance and your demonstrated acc/pass/tech capabilities. Speed-modified results and candidates use the actual SS/FS/SF ratings when available. ScoreSaber recommendations use overall star difficulty.
 
 [Read the full recommendation algorithm here](algorithm.md)
 
@@ -109,7 +111,7 @@ BeatLeader-only authenticated requests are routed through the installed BeatLead
 
 ## Building from Source
 
-If you want to contibute to the mod, you have to build it on your machine. If you just want to play with it, head over to [Releases](https://github.com/kalbuus/BeatLocator/releases/)
+If you want to contribute to the mod, you have to build it on your machine. If you just want to play with it, head over to [Releases](https://github.com/kalbuus/BeatLocator/releases/)
 
 ### Requirements
 

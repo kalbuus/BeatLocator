@@ -31,7 +31,7 @@
     <PluginId>BeatLocator</PluginId>
     <PluginName>BeatLocator</PluginName>
     <Authors>kalbuus</Authors>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <GameVersion>$(BeatSaberVersion)</GameVersion>
     <Description>Finds ranked Beat Saber maps that match your BeatLeader or ScoreSaber profile.</Description>
     <!--<PluginIcon></PluginIcon>-->
