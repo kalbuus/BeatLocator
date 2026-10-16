@@ -69,7 +69,6 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
     private Button _primaryButton = null!;
     [UIComponent("solo-button")]
     private Button _soloButton = null!;
-    private CanvasGroup _soloButtonCanvasGroup = null!;
     [UIComponent("gameplay-settings-button")]
     private Button _gameplaySettingsButton = null!;
     [UIValue("soloButtonText")]
@@ -184,10 +183,6 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
             : PrimaryButtonState.Download;
         SoloButtonText = "OPEN";
         NotifyPropertyChanged(nameof(SoloButtonText));
-        if (_soloButton != null)
-        {
-            HideOpenButtonForReveal();
-        }
 
         NotifyPropertyChanged(nameof(SongTitleText));
         NotifyPropertyChanged(nameof(SongSubNameText));
@@ -646,7 +641,6 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
 
     private void PrepareSongDetails()
     {
-        _soloButtonCanvasGroup = GetOrAddCanvasGroup(_soloButton.gameObject);
         _songDetails.anchorMin = new Vector2(0.5f, 0.5f);
         _songDetails.anchorMax = new Vector2(0.5f, 0.5f);
         _songDetails.pivot = new Vector2(0.5f, 0.5f);
@@ -674,7 +668,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         AddSongDetailCanvasGroup(_songActions);
 
         _songDetails.gameObject.SetActive(false);
-        HideOpenButtonForReveal();
+        _soloButton.interactable = false;
         _gameplaySettingsButton.interactable = false;
     }
 
@@ -684,16 +678,6 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         {
             _songDifficulty.gameObject.SetActive(!_secretDifficulty);
         }
-    }
-
-    private void HideOpenButtonForReveal()
-    {
-        // Reserve its place in the action row while preserving the delayed reveal.
-        _soloButton.gameObject.SetActive(true);
-        _soloButton.interactable = false;
-        _soloButtonCanvasGroup ??= GetOrAddCanvasGroup(_soloButton.gameObject);
-        _soloButtonCanvasGroup.alpha = 0f;
-        _soloButtonCanvasGroup.blocksRaycasts = false;
     }
 
     private void EnforceSongDetailsBounds()
@@ -1167,7 +1151,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         _viewportBackground.enabled = true;
         _viewportBackground.color = _viewportBackgroundColor;
         _songDetails.gameObject.SetActive(false);
-        HideOpenButtonForReveal();
+        _soloButton.interactable = false;
         _gameplaySettingsButton.interactable = false;
         _menuButton.interactable = false;
         _skipButton.interactable = false;
@@ -1333,28 +1317,7 @@ public sealed class RouletteAnimationViewController : BSMLAutomaticViewControlle
         var actionsReady = _primaryButtonState != PrimaryButtonState.Starting &&
                            _primaryButtonState != PrimaryButtonState.Downloading;
         _primaryButton.interactable = actionsReady;
-
-        // Reveal OPEN last, after the other actions in the same row have settled.
-        yield return new WaitForSecondsRealtime(0.2f);
-        if (runId != _runId) yield break;
-        _soloButtonCanvasGroup.alpha = 0f;
-        _soloButtonCanvasGroup.blocksRaycasts = false;
-        _soloButton.interactable = false;
-        _soloButton.gameObject.SetActive(true);
-        elapsed = 0f;
-        const float soloFadeDuration = 0.2f;
-        while (elapsed < soloFadeDuration && runId == _runId)
-        {
-            elapsed += Time.unscaledDeltaTime;
-            var progress = Mathf.Clamp01(elapsed / soloFadeDuration);
-            _soloButtonCanvasGroup.alpha = progress;
-            yield return null;
-        }
-        if (runId != _runId) yield break;
-        _soloButtonCanvasGroup.alpha = 1f;
-        _soloButtonCanvasGroup.blocksRaycasts = true;
-        _soloButton.interactable = _primaryButtonState != PrimaryButtonState.Starting &&
-                                   _primaryButtonState != PrimaryButtonState.Downloading;
+        _soloButton.interactable = actionsReady;
     }
 
     private async void TogglePreviewPlayback()
